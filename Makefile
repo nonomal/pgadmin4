@@ -2,16 +2,16 @@
 #
 # pgAdmin 4 - PostgreSQL Tools
 #
-# Copyright (C) 2013 - 2023, The pgAdmin Development Team
+# Copyright (C) 2013 - 2025, The pgAdmin Development Team
 # This software is released under the PostgreSQL Licence
 #
 #########################################################################
 
 SHELL = /bin/sh
 
-APP_NAME := $(shell grep ^APP_NAME web/config.py | awk -F"=" '{print $$NF}' | tr -d '[:space:]' | tr -d "'" | awk '{print tolower($$0)}')
-APP_RELEASE := $(shell grep ^APP_RELEASE web/config.py | awk -F"=" '{print $$NF}' | tr -d '[:space:]')
-APP_REVISION := $(shell grep ^APP_REVISION web/config.py | awk -F"=" '{print $$NF}' | tr -d '[:space:]')
+APP_NAME := $(shell grep ^APP_NAME web/branding.py | awk -F"=" '{print $$NF}' | tr -d '[:space:]' | tr -d "'" | awk '{print tolower($$0)}')
+APP_RELEASE := $(shell grep ^APP_RELEASE web/version.py | awk -F"=" '{print $$NF}' | tr -d '[:space:]')
+APP_REVISION := $(shell grep ^APP_REVISION web/version.py | awk -F"=" '{print $$NF}' | tr -d '[:space:]')
 
 #########################################################################
 # High-level targets
@@ -42,7 +42,7 @@ linter:
 	cd web && yarn run linter
 
 check: install-node bundle linter check-pep8
-	cd web && yarn run karma start --single-run && python regression/runtests.py
+	cd web && yarn run test:js-once && python regression/runtests.py
 
 check-audit:
 	cd web && yarn run audit
@@ -77,10 +77,10 @@ check-feature: install-node bundle
 	cd web && python regression/runtests.py --pkg feature_tests
 
 check-js: install-node linter
-	cd web && yarn run karma start --single-run
+	cd web && yarn run test:js-once
 
 check-js-coverage:
-    cd web && yarn run test:karma-coverage
+    cd web && yarn run test:js-coverage
 
 # Include all clean sub-targets in clean
 clean: clean-appbundle clean-debian clean-dist clean-docs clean-node clean-pip clean-redhat clean-src
@@ -118,6 +118,7 @@ debian:
 
 docker:
 	echo $(APP_NAME)
+	git checkout HEAD
 	docker build --pull -t ${APP_NAME} -t $(APP_NAME):latest -t $(APP_NAME):$(APP_RELEASE) -t $(APP_NAME):$(APP_RELEASE).$(APP_REVISION) .
 
 docs:

@@ -2,7 +2,7 @@
 #
 # pgAdmin 4 - PostgreSQL Tools
 #
-# Copyright (C) 2013 - 2023, The pgAdmin Development Team
+# Copyright (C) 2013 - 2025, The pgAdmin Development Team
 # This software is released under the PostgreSQL Licence
 #
 ##########################################################################
@@ -13,7 +13,6 @@ import traceback
 from urllib.parse import urlencode
 from flask import url_for
 import regression
-import config
 from regression import parent_node_dict
 from pgadmin.utils.route import BaseTestGenerator
 from regression.python_test_utils import test_utils as utils
@@ -21,7 +20,8 @@ from pgadmin.browser.server_groups.servers.databases.tests import \
     utils as database_utils
 from pgadmin.utils.versioned_template_loader import \
     get_version_mapping_directories
-from config import PG_DEFAULT_DRIVER
+from pgadmin.utils.constants import DBMS_JOB_SCHEDULER_ID
+from regression.python_test_utils.test_utils import set_isolation_level
 
 
 def create_resql_module_list(all_modules, exclude_pkgs, for_modules):
@@ -109,7 +109,9 @@ class ReverseEngineeredSQLTestCases(BaseTestGenerator):
                                   'pga_job_id': '<PGA_JOB_ID>',
                                   'timestamptz_2': '<TIMESTAMPTZ_2>',
                                   'db_name': '<TEST_DB_NAME>',
-                                  'db_driver': '<DB_DRIVER>'}
+                                  'db_driver': '<DB_DRIVER>',
+                                  'LC_COLLATE': '<LC_COLLATE>',
+                                  'LC_CTYPE': '<LC_CTYPE>'}
 
         resql_module_list = create_resql_module_list(
             BaseTestGenerator.re_sql_module_list,
@@ -189,7 +191,12 @@ class ReverseEngineeredSQLTestCases(BaseTestGenerator):
                 elif arg == 'sid':
                     options['sid'] = int(self.server_information['server_id'])
                 elif arg == 'did':
-                    options['did'] = int(self.server_information['db_id'])
+                    # For database node object_id is the actual database id.
+                    if endpoint.__contains__('NODE-database') and \
+                            object_id is not None:
+                        options['did'] = int(object_id)
+                    else:
+                        options['did'] = int(self.server_information['db_id'])
                 elif arg == 'scid':
                     # For schema node object_id is the actual schema id.
                     if endpoint.__contains__('NODE-schema') and \
@@ -206,6 +213,8 @@ class ReverseEngineeredSQLTestCases(BaseTestGenerator):
                 # fsid represents Foreign Server oid
                 elif arg == 'fsid' and 'fsid' in self.parent_ids:
                     options['fsid'] = int(self.parent_ids['fsid'])
+                elif arg == 'jsid':
+                    options['jsid'] = DBMS_JOB_SCHEDULER_ID
                 else:
                     if object_id is not None:
                         try:
@@ -246,6 +255,10 @@ class ReverseEngineeredSQLTestCases(BaseTestGenerator):
 
             # Check precondition for schema
             self.check_schema_precondition(scenario)
+
+            if 'pre_scenario_sql' in scenario:
+                self.execute_prepost_sql(
+                    scenario['pre_scenario_sql'], False)
 
             # Preprocessed data to replace any place holder if available
             if 'preprocess_data' in scenario and \
@@ -355,6 +368,10 @@ class ReverseEngineeredSQLTestCases(BaseTestGenerator):
                         traceback.print_exc()
                         continue
 
+                if 'post_scenario_sql' in scenario:
+                    self.execute_prepost_sql(
+                        scenario['post_scenario_sql'], False)
+
                 print(scenario['name'] + "... ok")
             except Exception as _:
                 print(scenario['name'] + "... FAIL")
@@ -440,7 +457,8 @@ class ReverseEngineeredSQLTestCases(BaseTestGenerator):
         # urlencode
         msql_data = {
             key: json.dumps(val)
-            if isinstance(val, dict) or isinstance(val, list) else val
+            if isinstance(val, dict) or isinstance(val, list) else
+            (val if val is not None else 'null')
             for key, val in scenario['data'].items()}
 
         params = urlencode(msql_data)
@@ -590,6 +608,30 @@ class ReverseEngineeredSQLTestCases(BaseTestGenerator):
         pg_cursor.close()
         return precondition_flag
 
+    def execute_prepost_sql(self, sql, use_test_config_db_conn):
+        """
+        This method executes post_condition_sql
+        :param post_condition_sql: SQL query
+        :param use_test_config_db_conn
+        """
+        if use_test_config_db_conn:
+            conn = self.test_config_db_conn
+            pg_cursor = self.test_config_db_conn.cursor()
+        else:
+            self.get_db_connection()
+            conn = self.connection
+            pg_cursor = self.connection.cursor()
+
+        try:
+            old_isolation_level = conn.isolation_level
+            set_isolation_level(conn, 0)
+            pg_cursor.execute(sql)
+            set_isolation_level(conn, old_isolation_level)
+            conn.commit()
+        except Exception as e:
+            traceback.print_exc()
+        pg_cursor.close()
+
     def check_schema_precondition(self, scenario):
         """
         This function will check the given schema is exist or not. If exist
@@ -703,6 +745,8 @@ class ReverseEngineeredSQLTestCases(BaseTestGenerator):
             self.parent_ids['fsid'] = object_id
         elif endpoint.__contains__("NODE-role.obj"):
             object_name = object_data['rolname']
+        elif endpoint.__contains__("NODE-foreign_table"):
+            self.parent_ids['tid'] = object_id
 
         # Store object id with object name
         self.all_object_ids[object_name] = object_id
@@ -756,7 +800,7 @@ class ReverseEngineeredSQLTestCases(BaseTestGenerator):
             password = ''
             for line in resp_sql.split('\n'):
                 if 'PASSWORD' in line:
-                    found = re.search("'([\w\W]*)'", line)
+                    found = re.search(r"'([\w\W]*)'", line)
                     if found:
                         password = found.groups(0)[0]
                     break
@@ -778,6 +822,31 @@ class ReverseEngineeredSQLTestCases(BaseTestGenerator):
         if 'TEST_DB_NAME' in scenario:
             sql = sql.replace(self.JSON_PLACEHOLDERS['db_name'],
                               self.server_information['test_db_name'])
+
+        # get the database connection
+        if 'REPLACE_LOCALE' in scenario:
+            self.get_db_connection()
+            pg_cursor = self.connection.cursor()
+
+            db_name = self.server_information['test_db_name']
+            # Database name if specify in scenario
+            if 'data' in scenario and 'name' in scenario['data'] and \
+                    'db' in self.server:
+                db_name = self.server['db']
+
+            # Fetch the lc_collate and lc_ctype
+            pg_cursor.execute(
+                "SELECT datcollate as cname FROM pg_database WHERE datname = "
+                "'{0}'".format(db_name))
+            lc_collate = ''.join(pg_cursor.fetchone())
+            pg_cursor.execute(
+                "SELECT datctype as cname FROM pg_database WHERE datname = "
+                "'{0}'".format(db_name))
+            lc_ctype = ''.join(pg_cursor.fetchone())
+            pg_cursor.close()
+
+            sql = sql.replace(self.JSON_PLACEHOLDERS['LC_COLLATE'], lc_collate)
+            sql = sql.replace(self.JSON_PLACEHOLDERS['LC_CTYPE'], lc_ctype)
 
         return sql
 

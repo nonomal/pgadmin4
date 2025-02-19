@@ -2,7 +2,7 @@
 #
 # pgAdmin 4 - PostgreSQL Tools
 #
-# Copyright (C) 2013 - 2023, The pgAdmin Development Team
+# Copyright (C) 2013 - 2025, The pgAdmin Development Team
 # This software is released under the PostgreSQL Licence
 #
 ##########################################################################
@@ -631,7 +631,6 @@ rolmembership:{
 
             self.role = row['rolname']
             self.rolCanLogin = row['rolcanlogin']
-            self.rolCatUpdate = row['rolcatupdate']
             self.rolSuper = row['rolsuper']
 
         return False, ''
@@ -639,7 +638,7 @@ rolmembership:{
     def check_precondition(action=None):
         """
         This function will behave as a decorator which will checks the status
-        of the database connection for the maintainance database of the server,
+        of the database connection for the maintenance database of the server,
         beforeexecuting rest of the operation for the wrapped function. It will
         also attach manager, conn (maintenance connection for the server) as
         properties of the instance.
@@ -677,7 +676,8 @@ rolmembership:{
                 self.alterKeys = [
                     'rolcanlogin', 'rolsuper', 'rolcreatedb',
                     'rolcreaterole', 'rolinherit', 'rolreplication',
-                    'rolconnlimit', 'rolvaliduntil', 'rolpassword'
+                    'rolconnlimit', 'rolvaliduntil', 'rolpassword',
+                    'rolbypassrls'
                 ] if self.manager.version >= 90200 else [
                     'rolcanlogin', 'rolsuper', 'rolcreatedb',
                     'rolcreaterole', 'rolinherit', 'rolconnlimit',
@@ -794,7 +794,7 @@ rolmembership:{
 
     def _set_rolemembership(self, row):
 
-        if 'rolmembers' in row:
+        if 'rolmembers' in row and row['rolmembers'] is not None:
             rolmembers = []
             for role in row['rolmembers']:
                 role = re.search(r'([01])(.+)', role)
@@ -977,7 +977,6 @@ rolmembership:{
             conn=self.conn,
             role=self.role,
             rolCanLogin=self.rolCanLogin,
-            rolCatUpdate=self.rolCatUpdate,
             rolSuper=self.rolSuper,
             alterKeys=self.alterKeys
         )
@@ -1034,7 +1033,6 @@ rolmembership:{
                     conn=self.conn,
                     role=self.role,
                     rolCanLogin=self.rolCanLogin,
-                    rolCatUpdate=self.rolCatUpdate,
                     rolSuper=self.rolSuper,
                     alterKeys=self.alterKeys
                 ).strip('\n')
@@ -1263,7 +1261,7 @@ SELECT
     name, vartype, min_val::numeric AS min_val, max_val::numeric AS max_val,
     enumvals
 FROM
-    pg_settings
+    pg_show_all_settings()
 WHERE
     context in ('user', 'superuser')
 ) a""")

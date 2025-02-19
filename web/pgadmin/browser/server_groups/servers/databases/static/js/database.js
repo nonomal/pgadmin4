@@ -2,7 +2,7 @@
 //
 // pgAdmin 4 - PostgreSQL Tools
 //
-// Copyright (C) 2013 - 2023, The pgAdmin Development Team
+// Copyright (C) 2013 - 2025, The pgAdmin Development Team
 // This software is released under the PostgreSQL Licence
 //
 //////////////////////////////////////////////////////////////
@@ -11,16 +11,15 @@ import { getNodeAjaxOptions, getNodeListByName } from '../../../../../static/js/
 import { getNodePrivilegeRoleSchema } from '../../../static/js/privilege.ui';
 import { getNodeVariableSchema } from '../../../static/js/variable.ui';
 import DatabaseSchema from './database.ui';
-import Notify from '../../../../../../static/js/helpers/Notifier';
 import { showServerPassword } from '../../../../../../static/js/Dialogs/index';
 import _ from 'lodash';
 import getApiInstance, { parseApiError } from '../../../../../../static/js/api_instance';
 
 define('pgadmin.node.database', [
-  'sources/gettext', 'sources/url_for', 'jquery',
+  'sources/gettext', 'sources/url_for',
   'sources/pgadmin', 'pgadmin.browser.utils',
   'pgadmin.authenticate.kerberos', 'pgadmin.browser.collection',
-], function(gettext, url_for, $, pgAdmin, pgBrowser, Kerberos) {
+], function(gettext, url_for, pgAdmin, pgBrowser, Kerberos) {
 
   function canDeleteWithForce(itemNodeData, item) {
     let treeData = pgBrowser.tree.getTreeNodeHierarchy(item),
@@ -67,7 +66,7 @@ define('pgadmin.node.database', [
       },
       width: '700px',
       Init: function() {
-        /* Avoid mulitple registration of menus */
+        /* Avoid multiple registration of menus */
         if (this.initialized)
           return;
 
@@ -111,9 +110,16 @@ define('pgadmin.node.database', [
             data_disabled: gettext('Selected database is already disconnected.'),
           },
         },{
+          name: 'disconnect_all_databases', node: 'coll-database', module: this,
+          applies: ['object', 'context'], callback: 'disconnect_all_databases',
+          category: 'disconnect', priority: 5, label: gettext('Disconnect from all databases'),
+          enable: 'can_disconnect',data: {
+            data_disabled: gettext('All the databases are already disconnected.'),
+          },
+        },{
           name: 'generate_erd', node: 'database', module: this,
           applies: ['object', 'context'], callback: 'generate_erd',
-          category: 'erd', priority: 5, label: gettext('ERD For Database'),
+          priority: 5, label: gettext('ERD For Database'),
           enable: (node) => {
             return node.allowConn;
           }
@@ -141,13 +147,13 @@ define('pgadmin.node.database', [
         return (node && !node.connected && node.allowConn);
       },
       is_connected: function(node) {
-        return (node && node.connected && node.canDisconn);
+        return (node?.connected && node?.canDisconn);
       },
       is_psql_enabled: function(node) {
-        return (node && node.connected) && pgAdmin['enable_psql'];
+        return node?.connected && pgAdmin['enable_psql'];
       },
       is_conn_allow: function(node) {
-        return (node && node.allowConn);
+        return (node?.allowConn);
       },
       connection_lost: function(i, resp, server_connected) {
         if (pgBrowser.tree) {
@@ -155,7 +161,7 @@ define('pgadmin.node.database', [
             d = i && t.itemData(i),
             self = this;
 
-          while (d && d._type != 'database') {
+          while (d?._type != 'database') {
             i = t.parent(i);
             d = i && t.itemData(i);
           }
@@ -189,7 +195,7 @@ define('pgadmin.node.database', [
                 connect(self, d, t, i, true);
                 return;
               }
-              Notify.confirm(
+              pgAdmin.Browser.notifier.confirm(
                 gettext('Connection lost'),
                 gettext('Would you like to reconnect to the database?'),
                 function() {
@@ -208,6 +214,14 @@ define('pgadmin.node.database', [
           }
         }
       },
+      can_disconnect: function(node, item) {
+        return _.some(item.children, (child) => {
+          let data = pgAdmin.Browser.tree.getData(child),
+            {connected, canDisconn} = data;
+          return connected && canDisconn;
+        }
+        );
+      },
       callbacks: {
         /* Connect the database */
         connect_database: function(args){
@@ -217,7 +231,7 @@ define('pgadmin.node.database', [
             i = input.item || t.selected(),
             d = i  ? t.itemData(i) : undefined;
 
-          if (d && d.label != 'template0') {
+          if (d?.label != 'template0') {
             connect_to_database(obj, d, t, i, true);
           }
           return false;
@@ -231,45 +245,34 @@ define('pgadmin.node.database', [
             d = i  ? t.itemData(i) : undefined;
 
           if (d) {
-            Notify.confirm(
-              gettext('Disconnect from database'),
-              gettext('Are you sure you want to disconnect from database - %s?', d.label),
+            disconnect_from_database(obj, d, t, i, true);
+          }
+
+          return false;
+        },
+
+        disconnect_all_databases: function(args, item) {
+          let children = item.children ?? [],
+            obj = this,
+            t = pgBrowser.tree;
+
+          if (children) {
+            pgAdmin.Browser.notifier.confirm(
+              gettext('Disconnect from all databases'),
+              gettext('Are you sure you want to disconnect from all databases?'),
               function() {
-                let data = d;
-                getApiInstance().delete(
-                  obj.generate_url(i, 'connect', d, true),
-                ).then(({data: res})=> {
-                  if (res.success == 1) {
-                    let prv_i = t.parent(i);
-                    if(res.data.info_prefix) {
-                      res.info = `${_.escape(res.data.info_prefix)} - ${res.info}`;
-                    }
-                    Notify.success(res.info);
-                    t.removeIcon(i);
-                    data.connected = false;
-                    data.icon = data.isTemplate ? 'icon-database-template-not-connected':'icon-database-not-connected';
-
-                    t.addIcon(i, {icon: data.icon});
-                    t.unload(i);
-                    pgBrowser.Events.trigger('pgadmin:browser:tree:update-tree-state', i);
-                    setTimeout(function() {
-                      t.select(prv_i);
-                    }, 10);
-
-                  } else {
-                    try {
-                      Notify.error(res.errormsg);
-                    } catch (e) {
-                      console.warn(e.stack || e);
-                    }
-                    t.unload(i);
+                _.forEach(children, function(child) {
+                  let data = pgAdmin.Browser.tree.getData(child);
+                  if (data.connected && data.canDisconn) {
+                    disconnect_from_database(obj, data, t, child, false);
                   }
-                }).catch(function(error) {
-                  Notify.pgRespErrorNotify(error);
-                  t.unload(i);
                 });
+                t.deselect(item);
               },
-              function() { return true; }
+              function() { return true;},
+              gettext('Disconnect'),
+              gettext('Cancel'),
+              'disconnect'
             );
           }
 
@@ -332,6 +335,14 @@ define('pgadmin.node.database', [
           cacheLevel: 'server',
         });
 
+        let icu_locale = ()=>getNodeAjaxOptions('get_icu_locale', this, treeNodeInfo, itemNodeData, {
+          cacheLevel: 'server',
+        });
+
+        let builtin_locale = ()=>getNodeAjaxOptions('get_builtin_locale', this, treeNodeInfo, itemNodeData, {
+          cacheLevel: 'server',
+        });
+
         return new DatabaseSchema(
           ()=>getNodeVariableSchema(this, treeNodeInfo, itemNodeData, false, true),
           (privileges)=>getNodePrivilegeRoleSchema(this, treeNodeInfo, itemNodeData, privileges),
@@ -360,7 +371,10 @@ define('pgadmin.node.database', [
               }),
             datcollate: c_types,
             datctype: c_types,
+            daticulocale: icu_locale,
+            datbuiltinlocale: builtin_locale
           },
+          treeNodeInfo,
           {
             datowner: pgBrowser.serverInfo[treeNodeInfo.server._id].user.name,
           }
@@ -376,7 +390,7 @@ define('pgadmin.node.database', [
           // If node_info is not present in current object then it might in its
           // parent in case if we used sub node control
           let node_info = args.node_info || args.handler.node_info;
-          return 'catalog' in node_info ? false : true;
+          return !('catalog' in node_info);
         }
         return true;
       },
@@ -403,7 +417,7 @@ define('pgadmin.node.database', [
                   tree.setInode(_item);
                   let dbIcon = data.isTemplate ? 'icon-database-template-not-connected':'icon-database-not-connected';
                   tree.addIcon(_item, {icon: dbIcon});
-                  Notify.pgNotifier(fun_error, error, gettext('Connect to database.'));
+                  pgAdmin.Browser.notifier.pgNotifier(fun_error, error, gettext('Connect to database.'));
                 }
               );
             } else {
@@ -413,11 +427,11 @@ define('pgadmin.node.database', [
                 tree.addIcon(_item, {icon: dbIcon});
               }
 
-              Notify.pgNotifier('error', error, 'Error', function(msg) {
+              pgAdmin.Browser.notifier.pgNotifier('error', error, 'Error', function(msg) {
                 setTimeout(function() {
                   if (msg == 'CRYPTKEY_SET') {
                     connect_to_database(_model, _data, _tree, _item, _wasConnected);
-                  } else {
+                  } else if (msg != 'ALERT_CALLED') {
                     showServerPassword(
                       gettext('Connect to database'),
                       msg, _model, _data, _tree, _item, _status,
@@ -432,7 +446,7 @@ define('pgadmin.node.database', [
             res, model, _data, _tree, _item, _connected
           ) {
             _data.is_connecting = false;
-            if (res && res.data) {
+            if (res?.data) {
               if(typeof res.data.connected == 'boolean') {
                 _data.connected = res.data.connected;
               }
@@ -449,16 +463,16 @@ define('pgadmin.node.database', [
                 res.info = `${_.escape(res.data.info_prefix)} - ${res.info}`;
               }
               if(res.data.already_connected) {
-                Notify.info(res.info);
+                pgAdmin.Browser.notifier.info(res.info);
               } else {
-                Notify.success(res.info);
+                pgAdmin.Browser.notifier.success(res.info);
               }
               pgBrowser.Events.trigger(
                 'pgadmin:database:connected', _item, _data
               );
               /* Call enable/disable menu function after database is connected.
                To make sure all the menus for database is in the right state */
-              pgBrowser.enable_disable_menus.apply(pgBrowser, [_item]);
+              pgBrowser.enable_disable_menus(_item);
               pgBrowser.Nodes['database'].callbacks.selected(_item, _data);
 
               if (!_connected) {
@@ -498,6 +512,66 @@ define('pgadmin.node.database', [
               error, obj, data, tree, item, wasConnected
             );
           });
+      },
+      disconnect_from_database = function(obj, data, tree, item, notify=false) {
+        let d = data,
+          t = tree,
+          i = item,
+          label = data.label;
+        let disconnect = function() {
+          d.label = `<span class='text-muted'>[Disconnecting...]</span> ${label}`;
+          t.setLabel(i,{label:d.label});
+          t.close(i);
+          let data = d;
+          getApiInstance().delete(
+            obj.generate_url(i, 'connect', d, true),
+          ).then(({data: res})=> {
+            if (res.success == 1) {
+              let prv_i = t.parent(i);
+              if(res.data.info_prefix) {
+                res.info = `${_.escape(res.data.info_prefix)} - ${res.info}`;
+              }
+              pgAdmin.Browser.notifier.success(res.info);
+              t.removeIcon(i);
+              data.connected = false;
+              data.icon = data.isTemplate ? 'icon-database-template-not-connected':'icon-database-not-connected';
+              d.label = label;
+              t.setLabel(i, {label});
+              t.addIcon(i, {icon: data.icon});
+              t.unload(i);
+              pgBrowser.Events.trigger('pgadmin:browser:tree:update-tree-state', i);
+              setTimeout(function() {
+                t.select(prv_i);
+              }, 10);
+
+            } else {
+              try {
+                pgAdmin.Browser.notifier.error(res.errormsg);
+              } catch (e) {
+                console.warn(e.stack || e);
+              }
+              t.unload(i);
+            }
+          }).catch(function(error) {
+            pgAdmin.Browser.notifier.pgRespErrorNotify(error);
+            t.unload(i);
+          });
+        };
+        if (notify) {
+          pgAdmin.Browser.notifier.confirm(
+            gettext('Disconnect from database'),
+            gettext('Are you sure you want to disconnect from the database - <b>%s</b>?', d.label),
+            function() {
+              disconnect();
+            },
+            function() { return true; },
+            gettext('Disconnect'),
+            gettext('Cancel'),
+            'disconnect'
+          );
+        } else {
+          disconnect();
+        }
       };
   }
 

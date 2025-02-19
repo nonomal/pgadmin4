@@ -2,35 +2,39 @@
 #
 # pgAdmin 4 - PostgreSQL Tools
 #
-# Copyright (C) 2013 - 2023, The pgAdmin Development Team
+# Copyright (C) 2013 - 2025, The pgAdmin Development Team
 # This software is released under the PostgreSQL Licence
 #
 ##########################################################################
 """Implements Backup Utility"""
 
 import json
-import os
+import copy
 import functools
 import operator
 
-from flask import render_template, request, current_app, \
-    url_for, Response
-from flask_babel import gettext as _
-from flask_security import login_required, current_user
+from flask import render_template, request, current_app, Response
+from flask_babel import gettext
+from pgadmin.user_login_check import pga_login_required
 from pgadmin.misc.bgprocess.processes import BatchProcess, IProcessDesc
-from pgadmin.utils import PgAdminModule, get_storage_directory, html, \
-    fs_short_path, document_dir, does_utility_exist, get_server, \
+from pgadmin.utils import PgAdminModule, does_utility_exist, get_server, \
     filename_with_file_manager_path
 from pgadmin.utils.ajax import make_json_response, bad_request, unauthorized
 
 from config import PG_DEFAULT_DRIVER
+# This unused import is required as API test cases will fail if we remove it,
+# Have to identify the cause and then remove it.
 from pgadmin.model import Server, SharedServer
+from flask_security import current_user
 from pgadmin.misc.bgprocess import escape_dquotes_process_arg
-from pgadmin.utils.constants import MIMETYPE_APP_JS
+from pgadmin.utils.constants import MIMETYPE_APP_JS, SERVER_NOT_FOUND
+from pgadmin.tools.grant_wizard import get_data
 
 # set template path for sql scripts
 MODULE_NAME = 'backup'
 server_info = {}
+MVIEW_STR = 'materialized view'
+FOREIGN_TABLE_STR = 'foreign table'
 
 
 class BackupModule(PgAdminModule):
@@ -42,7 +46,7 @@ class BackupModule(PgAdminModule):
         javascript file.
     """
 
-    LABEL = _('Backup')
+    LABEL = gettext('Backup')
 
     def show_system_objects(self):
         """
@@ -56,7 +60,8 @@ class BackupModule(PgAdminModule):
             list: URL endpoints for backup module
         """
         return ['backup.create_server_job', 'backup.create_object_job',
-                'backup.utility_exists']
+                'backup.utility_exists', 'backup.objects',
+                'backup.schema_objects']
 
 
 # Create blueprint for BackupModule class
@@ -98,7 +103,7 @@ class BackupMessage(IProcessDesc):
             return ''
 
         for arg in _args:
-            if arg and len(arg) >= 2 and arg[:2] == '--':
+            if arg and len(arg) >= 2 and arg.startswith('--'):
                 self.cmd += ' ' + arg
             else:
                 self.cmd += cmd_arg(arg)
@@ -107,7 +112,7 @@ class BackupMessage(IProcessDesc):
         s = get_server(self.sid)
 
         if s is None:
-            return _("Not available")
+            return gettext("Not available")
 
         from pgadmin.utils.driver import get_driver
         driver = get_driver(PG_DEFAULT_DRIVER)
@@ -121,31 +126,31 @@ class BackupMessage(IProcessDesc):
     @property
     def type_desc(self):
         if self.backup_type == BACKUP.OBJECT:
-            return _("Backing up an object on the server")
+            return gettext("Backing up an object on the server")
         if self.backup_type == BACKUP.GLOBALS:
-            return _("Backing up the global objects")
+            return gettext("Backing up the global objects")
         elif self.backup_type == BACKUP.SERVER:
-            return _("Backing up the server")
+            return gettext("Backing up the server")
         else:
             # It should never reach here.
-            return _("Unknown Backup")
+            return gettext("Unknown Backup")
 
     @property
     def message(self):
         server_name = self.get_server_name()
 
         if self.backup_type == BACKUP.OBJECT:
-            return _(
+            return gettext(
                 "Backing up an object on the server '{0}' "
                 "from database '{1}'"
             ).format(server_name, self.database)
         if self.backup_type == BACKUP.GLOBALS:
-            return _("Backing up the global objects on "
-                     "the server '{0}'").format(
+            return gettext("Backing up the global objects on "
+                           "the server '{0}'").format(
                 server_name
             )
         elif self.backup_type == BACKUP.SERVER:
-            return _("Backing up the server '{0}'").format(
+            return gettext("Backing up the server '{0}'").format(
                 server_name
             )
         else:
@@ -154,13 +159,13 @@ class BackupMessage(IProcessDesc):
 
     def details(self, cmd, args):
         server_name = self.get_server_name()
-        backup_type = _("Backup")
+        backup_type = gettext("Backup")
         if self.backup_type == BACKUP.OBJECT:
-            backup_type = _("Backup Object")
+            backup_type = gettext("Backup Object")
         elif self.backup_type == BACKUP.GLOBALS:
-            backup_type = _("Backup Globals")
+            backup_type = gettext("Backup Globals")
         elif self.backup_type == BACKUP.SERVER:
-            backup_type = _("Backup Server")
+            backup_type = gettext("Backup Server")
 
         return {
             "message": self.message,
@@ -172,13 +177,13 @@ class BackupMessage(IProcessDesc):
 
 
 @blueprint.route("/")
-@login_required
+@pga_login_required
 def index():
-    return bad_request(errormsg=_("This URL cannot be called directly."))
+    return bad_request(errormsg=gettext("This URL cannot be called directly."))
 
 
 @blueprint.route("/backup.js")
-@login_required
+@pga_login_required
 def script():
     """render own javascript"""
     return Response(
@@ -216,7 +221,7 @@ def _get_args_params_values(data, conn, backup_obj_type, backup_file, server,
         '--port',
         port,
         '--username',
-        server.username,
+        manager.user,
         '--no-password'
     ]
 
@@ -231,6 +236,11 @@ def _get_args_params_values(data, conn, backup_obj_type, backup_file, server,
             return
         val = data.get(key, default_value)
         if val:
+            if isinstance(val, list):
+                for c_val in val:
+                    args.append(param)
+                    args.append(c_val)
+                return
             args.append(param)
             args.append(val)
 
@@ -310,7 +320,6 @@ def _get_args_params_values(data, conn, backup_obj_type, backup_file, server,
     set_param('use_column_inserts', '--column-inserts')
     set_param('load_via_partition_root', '--load-via-partition-root',
               manager.version >= 110000)
-    set_param('with_oids', '--oids')
     set_param('enable_row_security', '--enable-row-security')
     set_value('exclude_table_data', '--exclude-table-data')
     set_value('table_and_children', '--table-and-children', None,
@@ -320,6 +329,7 @@ def _get_args_params_values(data, conn, backup_obj_type, backup_file, server,
     set_value('exclude_table_data_and_children',
               '--exclude-table-data-and-children', None,
               manager.version >= 160000)
+    set_value('exclude_table', '--exclude-table')
 
     # Disable options
     set_param('disable_trigger', '--disable-triggers',
@@ -355,6 +365,23 @@ def _get_args_params_values(data, conn, backup_obj_type, backup_file, server,
         )
     )
 
+    if 'objects' in data:
+        selected_objects = data.get('objects', {})
+        for _key in selected_objects:
+            selected_key = 'schema' if _key == 'schema' else 'table'
+            args.extend(
+                functools.reduce(operator.iconcat, map(
+                    lambda s, param=selected_key:[
+                        f'--{param}',
+                        r'{0}.{1}'.format(
+                            driver.qtIdent(conn, s['schema']).
+                            replace('"', '\"'),
+                            driver.qtIdent(conn, s['name']).replace('"', '\"'))
+                        if type(s) is dict
+                        else driver.qtIdent(conn, s).replace('"', '\"')],
+                    selected_objects[_key] or []), [])
+            )
+
     return args
 
 
@@ -364,7 +391,7 @@ def _get_args_params_values(data, conn, backup_obj_type, backup_file, server,
 @blueprint.route(
     '/job/<int:sid>/object', methods=['POST'], endpoint='create_object_job'
 )
-@login_required
+@pga_login_required
 def create_backup_objects_job(sid):
     """
     Args:
@@ -394,7 +421,7 @@ def create_backup_objects_job(sid):
     if server is None:
         return make_json_response(
             success=0,
-            errormsg=_("Could not find the specified server.")
+            errormsg=SERVER_NOT_FOUND
         )
 
     # To fetch MetaData for the server
@@ -407,7 +434,7 @@ def create_backup_objects_job(sid):
     if not connected:
         return make_json_response(
             success=0,
-            errormsg=_("Please connect to the server first.")
+            errormsg=gettext("Please connect to the server first.")
         )
 
     utility = manager.utility('backup') if backup_obj_type == 'objects' \
@@ -471,7 +498,7 @@ def create_backup_objects_job(sid):
 @blueprint.route(
     '/utility_exists/<int:sid>/<backup_obj_type>', endpoint='utility_exists'
 )
-@login_required
+@pga_login_required
 def check_utility_exists(sid, backup_obj_type):
     """
     This function checks the utility file exist on the given path.
@@ -487,7 +514,7 @@ def check_utility_exists(sid, backup_obj_type):
     if server is None:
         return make_json_response(
             success=0,
-            errormsg=_("Could not find the specified server.")
+            errormsg=SERVER_NOT_FOUND
         )
 
     from pgadmin.utils.driver import get_driver
@@ -505,3 +532,131 @@ def check_utility_exists(sid, backup_obj_type):
         )
 
     return make_json_response(success=1)
+
+
+@blueprint.route(
+    '/objects/<int:sid>/<int:did>', endpoint='objects'
+)
+@blueprint.route(
+    '/objects/<int:sid>/<int:did>/<int:scid>', endpoint='schema_objects'
+)
+@pga_login_required
+def objects(sid, did, scid=None):
+    """
+    This function returns backup objects
+
+    Args:
+        sid: Server ID
+        did: database ID
+        scid: schema ID
+    Returns:
+        list of objects
+    """
+    server = get_server(sid)
+
+    if server is None:
+        return make_json_response(
+            success=0,
+            errormsg=SERVER_NOT_FOUND
+        )
+
+    from pgadmin.utils.driver import get_driver
+    from pgadmin.utils.ajax import precondition_required
+
+    server_info = {}
+    server_info['manager'] = get_driver(PG_DEFAULT_DRIVER) \
+        .connection_manager(sid)
+    server_info['conn'] = server_info['manager'].connection(
+        did=did)
+    # If DB not connected then return error to browser
+    if not server_info['conn'].connected():
+        return precondition_required(
+            gettext("Connection to the server has been lost.")
+        )
+
+    # Set template path for sql scripts
+    server_info['server_type'] = server_info['manager'].server_type
+    server_info['version'] = server_info['manager'].version
+    if server_info['server_type'] == 'pg':
+        server_info['template_path'] = 'grant_wizard/pg/#{0}#'.format(
+            server_info['version'])
+    elif server_info['server_type'] == 'ppas':
+        server_info['template_path'] = 'grant_wizard/ppas/#{0}#'.format(
+            server_info['version'])
+
+    res, _, empty_schema_list = get_data(sid, did, scid,
+                                         'schema' if scid else 'database',
+                                         server_info, True)
+
+    tree_data = {
+        'table': [],
+        'view': [],
+        MVIEW_STR: [],
+        FOREIGN_TABLE_STR: [],
+        'sequence': []
+    }
+
+    schema_group = {}
+
+    for data in res:
+        obj_type = data['object_type'].lower()
+        if obj_type in ['table', 'view', MVIEW_STR, FOREIGN_TABLE_STR,
+                        'sequence']:
+
+            if data['nspname'] not in schema_group:
+                schema_group[data['nspname']] = {
+                    'id': data['nspname'],
+                    'name': data['nspname'],
+                    'icon': 'icon-schema',
+                    'children': copy.deepcopy(tree_data),
+                    'is_schema': True,
+                }
+            icon_data = {
+                MVIEW_STR: 'icon-mview',
+                FOREIGN_TABLE_STR: 'icon-foreign_table'
+            }
+            icon = icon_data[obj_type] if obj_type in icon_data \
+                else data['icon']
+            schema_group[data['nspname']]['children'][obj_type].append({
+                'id': f'{data["nspname"]}_{data["name"]}',
+                'name': data['name'],
+                'icon': icon,
+                'schema': data['nspname'],
+                'type': obj_type,
+                '_name': '{0}.{1}'.format(data['nspname'], data['name'])
+            })
+
+    schema_group = [dt for k, dt in schema_group.items()]
+    for ch in schema_group:
+        children = []
+        for obj_type, data in ch['children'].items():
+            if data:
+                icon_data = {
+                    MVIEW_STR: 'icon-coll-mview',
+                    FOREIGN_TABLE_STR: 'icon-coll-foreign_table'
+                }
+                icon = icon_data[obj_type] if obj_type in icon_data \
+                    else f'icon-coll-{obj_type.lower()}',
+                children.append({
+                    'id': f'{ch["id"]}_{obj_type}',
+                    'name': f'{obj_type.title()}s',
+                    'icon': icon,
+                    'children': data,
+                    'type': obj_type,
+                    'is_collection': True,
+                })
+
+        ch['children'] = children
+
+    for empty_schema in empty_schema_list:
+        schema_group.append({
+            'id': empty_schema,
+            'name': empty_schema,
+            'icon': 'icon-schema',
+            'children': [],
+            'is_schema': True,
+        })
+    return make_json_response(
+        data=schema_group,
+        success=200
+    )

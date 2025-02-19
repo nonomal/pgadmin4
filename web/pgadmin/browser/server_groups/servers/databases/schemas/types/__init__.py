@@ -2,7 +2,7 @@
 #
 # pgAdmin 4 - PostgreSQL Tools
 #
-# Copyright (C) 2013 - 2023, The pgAdmin Development Team
+# Copyright (C) 2013 - 2025, The pgAdmin Development Team
 # This software is released under the PostgreSQL Licence
 #
 ##########################################################################
@@ -28,6 +28,7 @@ from pgadmin.utils.ajax import make_json_response, internal_server_error, \
 from pgadmin.utils.driver import get_driver
 from pgadmin.tools.schema_diff.node_registry import SchemaDiffRegistry
 from pgadmin.tools.schema_diff.compare import SchemaDiffObjectCompare
+from pgadmin.utils.constants import DATA_TYPE_WITH_LENGTH
 
 
 class TypeModule(SchemaChildModule):
@@ -435,8 +436,9 @@ class TypeView(PGChildNodeView, DataTypeReader, SchemaDiffObjectCompare):
             typelist += collate
             properties_list.append(typelist)
 
-            is_tlength, is_precision, typeval = \
-                self.get_length_precision(row.get('elemoid', None))
+            is_tlength, is_precision, _ = \
+                self.get_length_precision(row.get('elemoid', None),
+                                          row.get('typname', None))
 
             # Split length, precision from type name for grid
             t_len, t_prec = DataTypeReader.parse_length_precision(
@@ -468,8 +470,9 @@ class TypeView(PGChildNodeView, DataTypeReader, SchemaDiffObjectCompare):
         :param rows: list of data
         :return: formatted response
         """
-        is_tlength, is_precision, typeval = \
-            self.get_length_precision(data.get('elemoid', None))
+        is_tlength, is_precision, _ = \
+            self.get_length_precision(data.get('elemoid', None),
+                                      data.get('typname', None))
 
         # Split length, precision from type name for grid
         t_len, t_prec = DataTypeReader.parse_length_precision(
@@ -676,8 +679,8 @@ class TypeView(PGChildNodeView, DataTypeReader, SchemaDiffObjectCompare):
             for row in rset['rows']:
                 # Check against PGOID for specific type
                 if row['elemoid']:
-                    if row['elemoid'] in (1560, 1561, 1562, 1563, 1042, 1043,
-                                          1014, 1015):
+                    if row['elemoid'] in DATA_TYPE_WITH_LENGTH or \
+                            row['typname'] in DATA_TYPE_WITH_LENGTH:
                         typeval = 'L'
                     elif row['elemoid'] in (1083, 1114, 1115, 1183, 1184, 1185,
                                             1186, 1187, 1266, 1270):
@@ -1227,7 +1230,7 @@ class TypeView(PGChildNodeView, DataTypeReader, SchemaDiffObjectCompare):
                 data[key] = val
 
         try:
-            sql, name = self.get_sql(gid, sid, data, scid, tid)
+            sql, _ = self.get_sql(gid, sid, data, scid, tid)
             # Most probably this is due to error
             if not isinstance(sql, str):
                 return sql
@@ -1475,7 +1478,7 @@ class TypeView(PGChildNodeView, DataTypeReader, SchemaDiffObjectCompare):
             if data[k] == '-':
                 data[k] = None
 
-        SQL, name = self.get_sql(gid, sid, data, scid, tid=None, is_sql=True)
+        SQL, _ = self.get_sql(gid, sid, data, scid, tid=None, is_sql=True)
         # Most probably this is due to error
         if not isinstance(SQL, str):
             return SQL
@@ -1527,8 +1530,11 @@ class TypeView(PGChildNodeView, DataTypeReader, SchemaDiffObjectCompare):
             scid: Schema ID
             tid: Type ID
         """
+        # For composite type typrelid is required to fetch dependencies.
+        type_where = "WHERE (dep.objid={0}::oid OR dep.objid=(select typrelid \
+            from pg_type where oid = {0}::oid))".format(tid)
         dependencies_result = self.get_dependencies(
-            self.conn, tid
+            self.conn, tid, where=type_where
         )
 
         return ajax_response(
@@ -1582,8 +1588,8 @@ class TypeView(PGChildNodeView, DataTypeReader, SchemaDiffObjectCompare):
         if data:
             if target_schema:
                 data['schema'] = target_schema
-            sql, name = self.get_sql(gid=gid, sid=sid, scid=scid,
-                                     data=data, tid=oid)
+            sql, _ = self.get_sql(gid=gid, sid=sid, scid=scid, data=data,
+                                  tid=oid)
         else:
             if drop_sql:
                 sql = self.delete(gid=gid, sid=sid, did=did,

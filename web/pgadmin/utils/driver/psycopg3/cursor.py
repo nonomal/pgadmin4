@@ -2,7 +2,7 @@
 #
 # pgAdmin 4 - PostgreSQL Tools
 #
-# Copyright (C) 2013 - 2022, The pgAdmin Development Team
+# Copyright (C) 2013 - 2025, The pgAdmin Development Team
 # This software is released under the PostgreSQL Licence
 #
 ##########################################################################
@@ -361,6 +361,20 @@ class AsyncDictCursor(_async_cursor):
         """
         self.row_factory = tuple_row
         res = asyncio.run(self._fetchone())
+        self.row_factory = dict_row
+        return res
+
+    def fetchwindow(self, from_rownum=0, to_rownum=0, _tupples=False):
+        """
+        Fetch many tuples as ordered dictionary list.
+        """
+        self._odt_desc = None
+        self.row_factory = tuple_row
+        asyncio.run(self._scrollcur(from_rownum, "absolute"))
+        res = asyncio.run(self._fetchmany(to_rownum - from_rownum + 1))
+        if not _tupples and res is not None:
+            res = [self._dict_tuple(t) for t in res]
+
         self.row_factory = dict_row
         return res
 

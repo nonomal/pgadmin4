@@ -2,7 +2,7 @@
 //
 // pgAdmin 4 - PostgreSQL Tools
 //
-// Copyright (C) 2013 - 2023, The pgAdmin Development Team
+// Copyright (C) 2013 - 2025, The pgAdmin Development Team
 // This software is released under the PostgreSQL Licence
 //
 //////////////////////////////////////////////////////////////
@@ -18,15 +18,6 @@ import getApiInstance from '../../../../static/js/api_instance';
 import { CloudWizardEventsContext } from './CloudWizard';
 import {MESSAGE_TYPE } from '../../../../static/js/components/FormComponents';
 import gettext from 'sources/gettext';
-import { makeStyles } from '@material-ui/core/styles';
-
-const useStyles = makeStyles(() =>
-  ({
-    formClass: {
-      overflow: 'auto',
-    }
-  }),
-);
 
 
 export function GoogleCredentials(props) {
@@ -62,7 +53,7 @@ export function GoogleCredentials(props) {
           })
           .catch((error) => {
             _eventBus.fireEvent('SET_ERROR_MESSAGE_FOR_CLOUD_WIZARD',[MESSAGE_TYPE.ERROR, gettext(`Error while authentication: ${error}`)]);
-            reject(false);
+            reject(new Error(gettext(`Error while authentication: ${error}`)));
           });
         });
       },
@@ -88,7 +79,7 @@ export function GoogleCredentials(props) {
                   _eventBus.fireEvent('SET_CRED_VERIFICATION_INITIATED',false);
                   clearInterval(interval);
                   resolve(false);
-                } else if (child && child.closed || countdown <= 0) {
+                } else if (child?.closed || countdown <= 0) {
                   _eventBus.fireEvent('SET_ERROR_MESSAGE_FOR_CLOUD_WIZARD',[MESSAGE_TYPE.ERROR, 'Authentication is aborted.']);
                   _eventBus.fireEvent('SET_CRED_VERIFICATION_INITIATED',false);
                   clearInterval(interval);
@@ -96,7 +87,7 @@ export function GoogleCredentials(props) {
               })
               .catch((error)=>{
                 clearInterval(interval);
-                reject(error);
+                reject(error instanceof Error ? error : Error(gettext('Something went wrong')));
               });
             countdown = countdown - 1;
           }, 1000);
@@ -119,8 +110,6 @@ export function GoogleCredentials(props) {
   />;
 }
 GoogleCredentials.propTypes = {
-  nodeInfo: PropTypes.object,
-  nodeData: PropTypes.object,
   cloudProvider: PropTypes.string,
   setGoogleCredData: PropTypes.func
 };
@@ -128,7 +117,6 @@ GoogleCredentials.propTypes = {
 // Google Instance
 export function GoogleInstanceDetails(props) {
   const [googleInstanceSchema, setGoogleInstanceSchema] = React.useState();
-  const classes = useStyles();
 
   React.useMemo(() => {
     const GoogleClusterSchemaObj = new GoogleClusterSchema({
@@ -188,7 +176,6 @@ export function GoogleInstanceDetails(props) {
     onDataChange={(isChanged, changedData) => {
       props.setGoogleInstanceData(changedData);
     }}
-    formClassName={classes.formClass}
   />;
 }
 GoogleInstanceDetails.propTypes = {
@@ -197,15 +184,13 @@ GoogleInstanceDetails.propTypes = {
   cloudProvider: PropTypes.string,
   setGoogleInstanceData: PropTypes.func,
   hostIP: PropTypes.string,
-  subscriptions: PropTypes.array,
   googleInstanceData: PropTypes.object
 };
 
 
 // Google Database Details
 export function GoogleDatabaseDetails(props) {
-  const [gooeleDBInstance, setGoogleDBInstance] = React.useState();
-  const classes = useStyles();
+  const [googleDBInstance, setGoogleDBInstance] = React.useState();
 
   React.useMemo(() => {
     const googleDBSchema = new GoogleDatabaseSchema({
@@ -223,13 +208,12 @@ export function GoogleDatabaseDetails(props) {
     formType={'dialog'}
     getInitData={() => { /*This is intentional (SonarQube)*/ }}
     viewHelperProps={{ mode: 'create' }}
-    schema={gooeleDBInstance}
+    schema={googleDBInstance}
     showFooter={false}
     isTabView={false}
     onDataChange={(isChanged, changedData) => {
       props.setGoogleDatabaseData(changedData);
     }}
-    formClassName={classes.formClass}
   />;
 }
 GoogleDatabaseDetails.propTypes = {

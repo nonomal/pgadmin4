@@ -2,7 +2,7 @@
 #
 # pgAdmin 4 - PostgreSQL Tools
 #
-# Copyright (C) 2013 - 2023, The pgAdmin Development Team
+# Copyright (C) 2013 - 2025, The pgAdmin Development Team
 # This software is released under the PostgreSQL Licence
 #
 ##########################################################################
@@ -61,7 +61,7 @@ class CollectionNodeModule(PgAdminModule, PGChildModule, metaclass=ABCMeta):
         return True
 
     def generate_browser_node(
-            self, node_id, parent_id, label, icon, **kwargs
+            self, node_id, parent_id, label, icon=None, **kwargs
     ):
         obj = {
             "id": "%s_%s" % (self.node_type, node_id),
@@ -217,10 +217,6 @@ class CollectionNodeModule(PgAdminModule, PGChildModule, metaclass=ABCMeta):
     @property
     def node_path(self):
         return self.browser_url_prefix + self.node_type
-
-    @property
-    def javascripts(self):
-        return []
 
     @property
     def show_node(self):

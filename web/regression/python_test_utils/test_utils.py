@@ -2,7 +2,7 @@
 #
 # pgAdmin 4 - PostgreSQL Tools
 #
-# Copyright (C) 2013 - 2023, The pgAdmin Development Team
+# Copyright (C) 2013 - 2025, The pgAdmin Development Team
 # This software is released under the PostgreSQL Licence
 #
 ##########################################################################
@@ -50,8 +50,23 @@ COVERAGE_CONFIG_FILE = os.path.join(CURRENT_PATH, ".coveragerc")
 file_name = os.path.realpath(__file__)
 
 
-def get_db_connection(db, username, password, host, port, sslmode="prefer"):
+def get_db_connection(db, username, password, host, port, sslmode="prefer",
+                      max_connections=None):
     """This function returns the connection object of psycopg"""
+    if max_connections:
+        with psycopg.connect(
+            dbname=db,
+            user=username,
+            password=password,
+            host=host,
+            port=port,
+            sslmode=sslmode,
+            autocommit=True,
+        ) as conn:
+            cur = conn.cursor()
+            cur.execute('ALTER SYSTEM SET max_connections TO 100;')
+            cur.execute('SELECT pg_reload_conf();')
+
     connection = psycopg.connect(
         dbname=db,
         user=username,
@@ -921,6 +936,42 @@ def configure_preferences(default_binary_path=None):
             ('False', pref_confirm_on_refresh_close.pid)
         )
 
+    # Disable object breadcrumbs for tests
+    pref_breadcrumbs_enable = \
+        browser_pref.preference('breadcrumbs_enable')
+
+    user_pref = cur.execute(
+        select_preference_query, (pref_breadcrumbs_enable.pid,)
+    )
+
+    if len(user_pref.fetchall()) == 0:
+        cur.execute(
+            insert_preferences_query,
+            (pref_breadcrumbs_enable.pid, 1, 'False')
+        )
+    else:
+        cur.execute(
+            update_preference_query,
+            ('False', pref_breadcrumbs_enable.pid)
+        )
+
+    conn.commit()
+    conn.close()
+
+
+def change_layout_for_feature_test():
+    """
+    This function is used to change the layout in the preferences from
+    'Workspace' to 'Classic'.
+    """
+    misc_pref = Preferences.module('misc')
+    pref_layout = misc_pref.preference('layout')
+
+    conn = sqlite3.connect(config.TEST_SQLITE_PATH)
+    cur = conn.cursor()
+    cur.execute('INSERT INTO user_preferences(pid, uid, value) VALUES (?,?,?)',
+                (pref_layout.pid, 1, 'classic')
+                )
     conn.commit()
     conn.close()
 
@@ -954,7 +1005,11 @@ def reset_layout_db(user_id=None):
 def remove_db_file():
     """This function use to remove SQLite DB file"""
     if os.path.isfile(config.TEST_SQLITE_PATH):
-        os.remove(config.TEST_SQLITE_PATH)
+        try:
+            os.remove(config.TEST_SQLITE_PATH)
+        except PermissionError:
+            # TODO: Added for issue 6164
+            pass
 
 
 def _cleanup(tester, app_starter):
@@ -1065,7 +1120,7 @@ def get_scenario_name(cases):
     for class_name, test_case_list in cases.items():
         result = {class_name: []}
         for case_name_dict in test_case_list:
-            key, value = list(case_name_dict.items())[0]
+            key, _ = list(case_name_dict.items())[0]
             class_names_dict = dict(
                 (c_name, "") for scenario in result[class_name] for
                 c_name in scenario.keys())
@@ -1822,7 +1877,7 @@ def module_patch(*args):
 
             # module was imported, let's use it in the patch
             patch = mock.patch(*args)
-            patch.getter = lambda: imported
+            patch.getter = lambda imported_module=imported:imported_module
             patch.attribute = '.'.join(components[i:])
             return patch
         except Exception:

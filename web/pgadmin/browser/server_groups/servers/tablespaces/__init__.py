@@ -2,7 +2,7 @@
 #
 # pgAdmin 4 - PostgreSQL Tools
 #
-# Copyright (C) 2013 - 2023, The pgAdmin Development Team
+# Copyright (C) 2013 - 2025, The pgAdmin Development Team
 # This software is released under the PostgreSQL Licence
 #
 ##########################################################################
@@ -485,7 +485,7 @@ class TablespaceView(PGChildNodeView):
                 current_app.logger.exception(ve)
                 data[k] = v
 
-        sql, name = self.get_sql(gid, sid, data, tsid)
+        sql, _ = self.get_sql(gid, sid, data, tsid)
         # Most probably this is due to error
         if not isinstance(sql, str):
             return sql
@@ -516,7 +516,7 @@ class TablespaceView(PGChildNodeView):
 
     def get_sql(self, gid, sid, data, tsid=None):
         """
-        This function will genrate sql from model/properties data
+        This function will generate sql from model/properties data
         """
         required_args = [
             'name'
@@ -601,7 +601,7 @@ class TablespaceView(PGChildNodeView):
         if not old_data['name'].startswith('pg_'):
             SQL = render_template(
                 "/".join([self.template_path, self._CREATE_SQL]),
-                data=old_data
+                data=old_data, conn=self.conn
             )
             SQL += "\n"
         SQL += render_template(

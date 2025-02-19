@@ -2,7 +2,7 @@
 //
 // pgAdmin 4 - PostgreSQL Tools
 //
-// Copyright (C) 2013 - 2023, The pgAdmin Development Team
+// Copyright (C) 2013 - 2025, The pgAdmin Development Team
 // This software is released under the PostgreSQL Licence
 //
 //////////////////////////////////////////////////////////////
@@ -123,6 +123,10 @@ export default class RowSecurityPolicySchema extends BaseUISchema {
           return obj.nodeInfo.server.version >= 100000;
         },
       },
+      {
+        id: 'description', label: gettext('Comment'), type: 'multiline',
+        mode: ['properties', 'create', 'edit'],
+      }
     ];
   }
 }

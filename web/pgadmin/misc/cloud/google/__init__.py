@@ -2,7 +2,7 @@
 # #
 # # pgAdmin 4 - PostgreSQL Tools
 # #
-# # Copyright (C) 2013 - 2023, The pgAdmin Development Team
+# # Copyright (C) 2013 - 2025, The pgAdmin Development Team
 # # This software is released under the PostgreSQL Licence
 # #
 # ##########################################################################
@@ -20,7 +20,7 @@ from pgadmin.utils.ajax import plain_text_response, unauthorized, \
 from pgadmin.misc.bgprocess import BatchProcess
 from pgadmin.misc.cloud.utils import _create_server, CloudProcessDesc
 from pgadmin.utils import PgAdminModule, filename_with_file_manager_path
-from flask_security import login_required
+from pgadmin.user_login_check import pga_login_required
 from flask import session, current_app, request
 from flask_babel import gettext as _
 
@@ -36,14 +36,6 @@ os.environ['OAUTHLIB_INSECURE_TRANSPORT'] = '1'  # Required for Oauth2
 
 class GooglePostgresqlModule(PgAdminModule):
     """Cloud module to deploy on Google Cloud"""
-
-    def get_own_stylesheets(self):
-        """
-        Returns:
-            list: the stylesheets used by this module.
-        """
-        stylesheets = []
-        return stylesheets
 
     def get_exposed_url_endpoints(self):
         return ['google.verify_credentials',
@@ -61,14 +53,14 @@ blueprint = GooglePostgresqlModule(MODULE_NAME, __name__,
 
 
 @blueprint.route("/")
-@login_required
+@pga_login_required
 def index():
     return bad_request(errormsg=_("This URL cannot be called directly."))
 
 
 @blueprint.route('/verify_credentials/',
                  methods=['POST'], endpoint='verify_credentials')
-@login_required
+@pga_login_required
 def verify_credentials():
     """
     Initiate process of authorisation for google oauth2
@@ -126,7 +118,7 @@ def verify_credentials():
 @blueprint.route('/callback',
                  methods=['GET'], endpoint='callback')
 @pgCSRFProtect.exempt
-@login_required
+@pga_login_required
 def callback():
     """
     Call back function on google authentication response.
@@ -140,7 +132,7 @@ def callback():
 
 @blueprint.route('/verification_ack',
                  methods=['GET'], endpoint='verification_ack')
-@login_required
+@pga_login_required
 def verification_ack():
     """
     Checks for google oauth2 authorisation confirmation
@@ -159,7 +151,7 @@ def verification_ack():
 
 @blueprint.route('/projects/',
                  methods=['GET'], endpoint='projects')
-@login_required
+@pga_login_required
 def get_projects():
     """
     Lists the projects for authorized user
@@ -173,7 +165,7 @@ def get_projects():
 
 @blueprint.route('/regions/<project_id>',
                  methods=['GET'], endpoint='regions')
-@login_required
+@pga_login_required
 def get_regions(project_id):
     """
     Lists regions based on project for authorized user
@@ -192,7 +184,7 @@ def get_regions(project_id):
 
 @blueprint.route('/availability_zones/<region>',
                  methods=['GET'], endpoint='availability_zones')
-@login_required
+@pga_login_required
 def get_availability_zones(region):
     """
     List availability zones for specified region
@@ -209,7 +201,7 @@ def get_availability_zones(region):
 
 @blueprint.route('/instance_types/<project_id>/<region>/<instance_class>',
                  methods=['GET'], endpoint='instance_types')
-@login_required
+@pga_login_required
 def get_instance_types(project_id, region, instance_class):
     """
     List the instances types for specified google project, region &
@@ -232,7 +224,7 @@ def get_instance_types(project_id, region, instance_class):
 
 @blueprint.route('/database_versions/',
                  methods=['GET'], endpoint='database_versions')
-@login_required
+@pga_login_required
 def get_database_versions():
     """
     Lists the postgresql database versions.

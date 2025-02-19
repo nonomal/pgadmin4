@@ -2,7 +2,7 @@
 #
 # pgAdmin 4 - PostgreSQL Tools
 #
-# Copyright (C) 2013 - 2023, The pgAdmin Development Team
+# Copyright (C) 2013 - 2025, The pgAdmin Development Team
 # This software is released under the PostgreSQL Licence
 #
 ##########################################################################
@@ -65,15 +65,23 @@ class CheckDebuggerForXssFeatureTest(BaseFeatureTest):
         function_node.click()
 
     def _debug_function(self):
+        wait = WebDriverWait(self.page.driver, 2)
         self.page.driver.find_element(By.CSS_SELECTOR,
                                       NavMenuLocators.object_menu_css).click()
+        wait.until(EC.presence_of_element_located(
+            (By.CSS_SELECTOR, "div[data-label='Debugging']")))
+
         ActionChains(
             self.page.driver
         ).move_to_element(
             self.page.driver.find_element(
                 By.CSS_SELECTOR, "div[data-label='Debugging']")
         ).perform()
-        time.sleep(2)
+
+        # time.sleep(2)
+        wait.until(EC.presence_of_element_located(
+            (By.CSS_SELECTOR, "li[data-label='Debug']")))
+
         self.page.driver.find_element(
             By.CSS_SELECTOR, "li[data-label='Debug']").click()
 
@@ -123,7 +131,7 @@ class CheckDebuggerForXssFeatureTest(BaseFeatureTest):
 
             # Only this tab is vulnerable rest are Code Mirror
             # control which are already tested in Query tool test case
-            self.page.click_tab('id-debugger-messages', rc_dock=True)
+            self.page.click_tab('Messages')
             source_code = self.page.find_by_xpath(
                 "//div[@id='id-debugger-messages'] //div[@id='debugger-msg']"
             ).get_attribute('innerHTML')
@@ -139,10 +147,9 @@ class CheckDebuggerForXssFeatureTest(BaseFeatureTest):
 
     def _close_debugger(self):
         self.page.driver.switch_to.default_content()
-        self.page.click_element(
-            self.page.find_by_xpath(
-                "//*[@id='dockerContainer']/div/div[3]/div/div[2]/div[1]")
-        )
+        self.page.find_by_css_selector("div[data-dockid='id-main'] "
+                                       ".dock-tab.dock-tab-active "
+                                       "button[data-label='Close']").click()
 
     def _check_escaped_characters(self, source_code, string_to_find, source):
         # For XSS we need to search against element's html code

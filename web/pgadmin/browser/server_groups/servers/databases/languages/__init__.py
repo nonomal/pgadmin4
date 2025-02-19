@@ -2,7 +2,7 @@
 #
 # pgAdmin 4 - PostgreSQL Tools
 #
-# Copyright (C) 2013 - 2023, The pgAdmin Development Team
+# Copyright (C) 2013 - 2025, The pgAdmin Development Team
 # This software is released under the PostgreSQL Licence
 #
 ##########################################################################
@@ -380,9 +380,10 @@ class LanguageView(PGChildNodeView, SchemaDiffObjectCompare):
         if len(res['rows']) == 0:
             return False, gone(self._NOT_FOUND_LANG_INFORMATION)
 
-        res['rows'][0]['is_sys_obj'] = (
-            res['rows'][0]['oid'] <= self._DATABASE_LAST_SYSTEM_OID or
-            self.datistemplate)
+        if isinstance(res['rows'], list):
+            res['rows'][0]['is_sys_obj'] = (
+                res['rows'][0]['oid'] <= self._DATABASE_LAST_SYSTEM_OID or
+                self.datistemplate)
 
         sql = render_template(
             "/".join([self.template_path, self._ACL_SQL]),
@@ -594,7 +595,7 @@ class LanguageView(PGChildNodeView, SchemaDiffObjectCompare):
             except ValueError:
                 data[k] = v
         try:
-            sql, name = self.get_sql(data, lid)
+            sql, _ = self.get_sql(data, lid)
             # Most probably this is due to error
             if not isinstance(sql, str):
                 return sql
@@ -867,7 +868,7 @@ class LanguageView(PGChildNodeView, SchemaDiffObjectCompare):
         drop_sql = kwargs.get('drop_sql', False)
 
         if data:
-            sql, name = self.get_sql(data=data, lid=oid)
+            sql, _ = self.get_sql(data=data, lid=oid)
         else:
             if drop_sql:
                 sql = self.delete(gid=gid, sid=sid, did=did,

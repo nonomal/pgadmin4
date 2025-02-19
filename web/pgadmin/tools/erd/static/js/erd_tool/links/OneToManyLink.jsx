@@ -2,7 +2,7 @@
 //
 // pgAdmin 4 - PostgreSQL Tools
 //
-// Copyright (C) 2013 - 2023, The pgAdmin Development Team
+// Copyright (C) 2013 - 2025, The pgAdmin Development Team
 // This software is released under the PostgreSQL Licence
 //
 //////////////////////////////////////////////////////////////
@@ -19,9 +19,9 @@ import {
 import {Point} from '@projectstorm/geometry';
 import _ from 'lodash';
 import PropTypes from 'prop-types';
-import { makeStyles } from '@material-ui/core';
-import clsx from 'clsx';
+import { styled } from '@mui/material/styles';
 import { ERDCanvasSettings } from '../components/ERDTool';
+import { keyframes } from '@emotion/react';
 
 export const POINTER_SIZE = 30;
 
@@ -44,6 +44,10 @@ export class OneToManyLinkModel extends RightAngleLinkModel {
 
     this._data = {
       ...data,
+    };
+    this._linkPointType = {
+      sourceType: 'one',
+      targetType: 'many'
     };
   }
 
@@ -77,40 +81,76 @@ export class OneToManyLinkModel extends RightAngleLinkModel {
       data: this.getData(),
     };
   }
+
+  setPointType(nodesDict) {
+    let data = this.getData();
+    let target = nodesDict[data['local_table_uid']].getData();
+    let colName = _.find(target.columns, (col)=>data.local_column_attnum == col.attnum).name;
+    let {pkCols=[], ukCols=[]} = nodesDict[data['local_table_uid']].getConstraintCols();
+    let targetType = pkCols.includes(colName) || ukCols.includes(colName) ? 'one' : 'many';
+    this._linkPointType = {
+      ...this._linkPointType,
+      targetType,
+    };
+  }
+
+  getPointType() {
+    return this._linkPointType;
+  }
+
+  setFirstAndLastPathsDirection() {
+    let points = this.getPoints();
+    if (points.length > 2){
+      super.setFirstAndLastPathsDirection();
+    } else {
+      let dx = Math.abs(points[1].getX() - points[0].getX());
+      let dy = Math.abs(points[1].getY() - points[0].getY());
+      this._firstPathXdirection = dx > dy;
+      this._lastPathXdirection = dx > dy;
+    }
+  }
 }
 
-const useStyles = makeStyles((theme)=>({
-  svgLink: {
+const svgLinkSelected =   keyframes`
+  from { stroke-dashoffset: 24;}
+  to { stroke-dashoffset: 0; }
+`;
+
+const StyledG = styled('g')((
+  {
+    theme
+  }
+) => ({
+
+  '& .OneToMany-svgLink': {
     stroke: theme.palette.text.primary,
     fontSize: '0.8em',
   },
-  '@keyframes svgLinkSelected': {
-    'from': { strokeDashoffset: 24},
-    'to': { strokeDashoffset: 0 }
-  },
-  svgLinkSelected: {
-    strokeDasharray: '10, 2',
-    animation: '$svgLinkSelected 1s linear infinite'
-  },
-  svgLinkCircle: {
+  '& .OneToMany-svgLinkCircle': {
     fill: theme.palette.text.primary,
   },
-  svgLinkPath: {
+
+  '& .OneToMany-svgLinkSelected': {
+    strokeDasharray: '10, 2',
+    animation: `${svgLinkSelected} 1s linear infinite`
+  },
+  '& .OneToMany-svgLinkPath': {
     pointerEvents: 'all',
     cursor: 'move',
   }
 }));
 
+
 function ChenNotation({rotation, type}) {
-  const classes = useStyles();
+
   const textX = Math.sign(rotation) > 0 ? -14 : 8;
   const textY = -5;
   return (
     <>
-      <text className={classes.svgLink} x={textX} y={textY} transform={'rotate(' + -rotation + ')' }>
+      <text className='OneToMany-svgLink' x={textX} y={textY} transform={'rotate(' + -rotation + ')' }>
         {type == 'one' ? '1' : 'N'}
       </text>
-      <line className={classes.svgLink} x1="0" y1="0" x2="0" y2="30"></line>
+      <line className='OneToMany-svgLink' x1="0" y1="0" x2="0" y2="30"></line>
     </>
   );
 }
@@ -119,52 +159,52 @@ ChenNotation.propTypes = {
   type: PropTypes.string,
 };
 
-function CustomLinkEndWidget(props) {
-  const { point, rotation, tx, ty, type } = props;
-  const classes = useStyles();
+function NotationForType({itype, width, rotation}) {
   const settings = useContext(ERDCanvasSettings);
 
-  const svgForType = (itype) => {
-    if(settings.cardinality_notation == 'chen') {
-      return <ChenNotation rotation={rotation} type={itype} />;
-    }
-    if(itype == 'many') {
-      return (
-        <>
-          <circle className={clsx(classes.svgLink, classes.svgLinkCircle)} cx="0" cy="16" r={props.width*2.5} strokeWidth={props.width} />
-          <polyline className={classes.svgLink} points="-8,0 0,15 0,0 0,30 0,15 8,0" fill="none" strokeWidth={props.width} />
-        </>
-      );
-    } else if (itype == 'one') {
-      return (
-        <polyline className={classes.svgLink} points="-8,15 0,15 0,0 0,30 0,15 8,15" fill="none" strokeWidth={props.width} />
-      );
-    }
-  };
-
-  return (
-    <g transform={'translate(' + point.getPosition().x + ', ' + point.getPosition().y + ')'}>
-      <g transform={'translate('+tx+','+ty+')'}>
-        <g transform={'rotate(' + rotation + ')' }>
-          {svgForType(type)}
-        </g>
-      </g>
-    </g>
-  );
+  if(settings.cardinality_notation == 'chen') {
+    return <ChenNotation rotation={rotation} type={itype} />;
+  }
+  if(itype == 'many') {
+    return (
+      <>
+        <circle className={['OneToMany-svgLink','OneToMany-svgLinkCircle'].join(' ')} cx="0" cy="16" r={width*2.5} strokeWidth={width} />
+        <polyline className='OneToMany-svgLink' points="-8,0 0,15 0,0 0,30 0,15 8,0" fill="none" strokeWidth={width} />
+      </>
+    );
+  } else if (itype == 'one') {
+    return (
+      <polyline className='OneToMany-svgLink' points="-8,15 0,15 0,0 0,30 0,15 8,15" fill="none" strokeWidth={width} />
+    );
+  }
 }
 
-CustomLinkEndWidget.propTypes = {
-  point: PropTypes.instanceOf(PointModel).isRequired,
+NotationForType.propTypes = {
+  itype: PropTypes.oneOf(['many', 'one']).isRequired,
   rotation: PropTypes.number.isRequired,
-  tx: PropTypes.number.isRequired,
-  ty: PropTypes.number.isRequired,
-  type: PropTypes.oneOf(['many', 'one']).isRequired,
   width: PropTypes.number,
 };
+
 
 export class OneToManyLinkWidget extends RightAngleLinkWidget {
   constructor(props) {
     super(props);
+    this.state = {};
+    this.setPointType();
+    this.updateLinkListener = this.props.link.registerListener({
+      updateLink: ()=>{
+        this.setPointType();
+        this.setState({});
+      }
+    });
+  }
+
+  componentWillUnmount() {
+    this.props.link.deregisterListener(this.updateLinkListener);
+  }
+
+  setPointType() {
+    this.props.link.setPointType(this.props.diagramEngine.getModel().getNodesDict());
   }
 
   endPointTranslation(alignment) {
@@ -211,17 +251,13 @@ export class OneToManyLinkWidget extends RightAngleLinkWidget {
 
   generateCustomEndWidget({type, point, rotation, tx, ty}) {
     return (
-      <CustomLinkEndWidget
-        key={point.getID()}
-        point={point}
-        rotation={rotation}
-        tx={tx}
-        ty={ty}
-        type={type}
-        colorSelected={this.props.link.getOptions().selectedColor}
-        color={this.props.link.getOptions().color}
-        width={this.props.width}
-      />
+      <g key={point.getID()} transform={'translate(' + point.getPosition().x + ', ' + point.getPosition().y + ')'}>
+        <g transform={'translate('+tx+','+ty+')'}>
+          <g transform={'rotate(' + rotation + ')' }>
+            <NotationForType itype={type} width={this.props.width} rotation={rotation} />
+          </g>
+        </g>
+      </g>
     );
   }
 
@@ -251,9 +287,10 @@ export class OneToManyLinkWidget extends RightAngleLinkWidget {
     //ensure id is present for all points on the path
     let points = this.props.link.getPoints();
     let paths = [];
+    let {sourceType, targetType} = this.props.link.getPointType();
 
-    let onePoint = this.addCustomWidgetPoint('one', this.props.link.getSourcePort(), points[0]);
-    let manyPoint = this.addCustomWidgetPoint('many', this.props.link.getTargetPort(), points[points.length-1]);
+    let onePoint = this.addCustomWidgetPoint(sourceType, this.props.link.getSourcePort(), points[0]);
+    let manyPoint = this.addCustomWidgetPoint(targetType, this.props.link.getTargetPort(), points[points.length-1]);
 
     if (!this.state.canDrag && points.length > 2) {
       // Those points and its position only will be moved
@@ -264,18 +301,17 @@ export class OneToManyLinkWidget extends RightAngleLinkWidget {
           } else {
             points[i].setPosition(points[i - 1].getX(), points[i].getY());
           }
+        } else if (this.props.link.getLastPathXdirection()) {
+          points[i - 1].setPosition(points[i - 1].getX(), points[i].getY());
         } else {
-          if (this.props.link.getLastPathXdirection()) {
-            points[i - 1].setPosition(points[i - 1].getX(), points[i].getY());
-          } else {
-            points[i - 1].setPosition(points[i].getX(), points[i - 1].getY());
-          }
+          points[i - 1].setPosition(points[i].getX(), points[i - 1].getY());
         }
       }
     }
 
     // If there is existing link which has two points add one
-    if (points.length === 2 && !this.state.canDrag) {
+    // and the link is horizontal
+    if (points.length === 2 && !this.state.canDrag && onePoint.point.getX() != manyPoint.point.getX()) {
       this.props.link.addPoint(
         new PointModel({
           link: this.props.link,
@@ -285,6 +321,7 @@ export class OneToManyLinkWidget extends RightAngleLinkWidget {
     }
 
     paths.push(this.generateCustomEndWidget(onePoint));
+
     for (let j = 0; j < points.length - 1; j++) {
       paths.push(
         this.generateLink(
@@ -313,18 +350,16 @@ export class OneToManyLinkWidget extends RightAngleLinkWidget {
     }
     paths.push(this.generateCustomEndWidget(manyPoint));
 
-
-    this.refPaths = [];
-    return <g data-default-link-test={this.props.link.getOptions().testName}>{paths}</g>;
+    return <StyledG data-default-link-test={this.props.link.getOptions().testName}>{paths}</StyledG>;
   }
 }
 
 const LinkSegment = forwardRef(({model, selected, path, ...props}, ref)=>{
-  const classes = useStyles();
+
   return (
     <path
       ref={ref}
-      className={clsx(classes.svgLink, classes.svgLinkPath, (selected ? classes.svgLinkSelected : ''))}
+      className={['OneToMany-svgLink','OneToMany-svgLinkPath', (selected ? 'OneToMany-svgLinkSelected' : '')].join(' ')}
       stroke={model.getOptions().color}
       strokeWidth={model.getOptions().width}
       selected={selected}

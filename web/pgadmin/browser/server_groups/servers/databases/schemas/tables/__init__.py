@@ -2,7 +2,7 @@
 #
 # pgAdmin 4 - PostgreSQL Tools
 #
-# Copyright (C) 2013 - 2023, The pgAdmin Development Team
+# Copyright (C) 2013 - 2025, The pgAdmin Development Team
 # This software is released under the PostgreSQL Licence
 #
 ##########################################################################
@@ -24,7 +24,7 @@ from .utils import BaseTableView
 from pgadmin.tools.schema_diff.node_registry import SchemaDiffRegistry
 from pgadmin.browser.server_groups.servers.databases.schemas.tables.\
     constraints.foreign_key import utils as fkey_utils
-from .schema_diff_utils import SchemaDiffTableCompare
+from .schema_diff_table_utils import SchemaDiffTableCompare
 from pgadmin.browser.server_groups.servers.databases.schemas.tables.\
     columns import utils as column_utils
 from pgadmin.browser.server_groups.servers.databases.schemas.tables.\
@@ -295,6 +295,7 @@ class TableView(BaseTableView, DataTypeReader, SchemaDiffTableCompare):
         'get_toast_table_vacuum': [{}, {'get': 'get_toast_table_vacuum'}],
         'all_tables': [{}, {'get': 'get_all_tables'}],
         'get_access_methods': [{}, {'get': 'get_access_methods'}],
+        'get_table_access_methods': [{}, {'get': 'get_table_access_methods'}],
         'get_oper_class': [{}, {'get': 'get_oper_class'}],
         'get_operator': [{}, {'get': 'get_operator'}],
         'get_attach_tables': [
@@ -532,6 +533,28 @@ class TableView(BaseTableView, DataTypeReader, SchemaDiffTableCompare):
 
         """
         res = exclusion_utils.get_access_methods(self.conn)
+
+        return make_json_response(
+            data=res,
+            status=200
+        )
+
+    @BaseTableView.check_precondition
+    def get_table_access_methods(self, gid, sid, did, scid, tid=None):
+        """
+        This function returns access methods for table.
+
+        Args:
+          gid: Server Group ID
+          sid: Server ID
+          did: Database ID
+          scid: Schema ID
+          tid: Table ID
+
+        Returns:
+          Returns list of access methods for table
+        """
+        res = BaseTableView.get_access_methods(self)
 
         return make_json_response(
             data=res,
@@ -1056,6 +1079,7 @@ class TableView(BaseTableView, DataTypeReader, SchemaDiffTableCompare):
             return super().update(
                 gid, sid, did, scid, tid, data=data, res=res)
         except Exception as e:
+            current_app.logger.exception(e)
             return internal_server_error(errormsg=str(e))
 
     @BaseTableView.check_precondition
@@ -1272,7 +1296,7 @@ class TableView(BaseTableView, DataTypeReader, SchemaDiffTableCompare):
             if target_schema:
                 data['schema'] = target_schema
 
-            sql, partition_sql = BaseTableView.get_reverse_engineered_sql(
+            sql, _ = BaseTableView.get_reverse_engineered_sql(
                 self, did=did, scid=scid, tid=tid, main_sql=main_sql,
                 data=data, json_resp=json_resp,
                 add_not_exists_clause=if_exists_flag)
@@ -1313,7 +1337,7 @@ class TableView(BaseTableView, DataTypeReader, SchemaDiffTableCompare):
             if not status:
                 return res
 
-        SQL, name = self.get_sql(did, scid, tid, data, res)
+        SQL, _ = self.get_sql(did, scid, tid, data, res)
         SQL = re.sub('\n{2,}', '\n\n', SQL)
         SQL = SQL.strip('\n')
 
@@ -1650,7 +1674,7 @@ class TableView(BaseTableView, DataTypeReader, SchemaDiffTableCompare):
         return sql
 
     @BaseTableView.check_precondition
-    def fetch_tables(self, sid, did, scid, tid=None):
+    def fetch_tables(self, sid, did, scid, tid=None, with_serial_cols=False):
         """
         This function will fetch the list of all the tables
         and will be used by schema diff.
@@ -1659,10 +1683,12 @@ class TableView(BaseTableView, DataTypeReader, SchemaDiffTableCompare):
         :param did: Database Id
         :param scid: Schema Id
         :param tid: Table Id
+        :param with_serial_cols:
         :return: Table dataset
         """
 
-        status, res = BaseTableView.fetch_tables(self, sid, did, scid, tid)
+        status, res = BaseTableView.fetch_tables(self, sid, did, scid, tid,
+                                                 with_serial_cols)
         if not status:
             current_app.logger.error(res)
             return False

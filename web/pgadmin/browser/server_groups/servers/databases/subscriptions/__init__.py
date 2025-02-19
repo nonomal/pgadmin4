@@ -2,7 +2,7 @@
 #
 # pgAdmin 4 - PostgreSQL Tools
 #
-# Copyright (C) 2013 - 2023, The pgAdmin Development Team
+# Copyright (C) 2013 - 2025, The pgAdmin Development Team
 # This software is released under the PostgreSQL Licence
 #
 ##########################################################################
@@ -180,6 +180,18 @@ class SubscriptionView(PGChildNodeView, SchemaDiffObjectCompare):
         gettext("Could not find the subscription information.")
     node_type = blueprint.node_type
     BASE_TEMPLATE_PATH = "subscriptions/sql/#{0}#"
+
+    # This mapping will be used PostgresSQL 16 above
+    streaming_mapping = {
+        'p': 'parallel',
+        't': True,
+        'f': False
+    }
+    two_phase_mapping = {
+        'p': True,
+        'e': True,
+        'd': False
+    }
 
     parent_ids = [
         {'type': 'int', 'id': 'gid'},
@@ -370,6 +382,14 @@ class SubscriptionView(PGChildNodeView, SchemaDiffObjectCompare):
         if len(res['rows']) == 0:
             return False, gone(self._NOT_FOUND_PUB_INFORMATION)
 
+        if self.manager.version >= 150000:
+            res['rows'][0]['two_phase'] = \
+                self.two_phase_mapping[res['rows'][0]['two_phase']]
+
+        if self.manager.version >= 160000:
+            res['rows'][0]['streaming'] = \
+                self.streaming_mapping[res['rows'][0]['streaming']]
+
         return True, res['rows'][0]
 
     @check_precondition
@@ -387,7 +407,7 @@ class SubscriptionView(PGChildNodeView, SchemaDiffObjectCompare):
         sql = render_template("/".join([self.template_path,
                                         'stats.sql']),
                               subid=subid, did=did, conn=self.conn)
-        status, res = self.conn.execute_dict(sql)
+        _, res = self.conn.execute_dict(sql)
         return make_json_response(
             data=res,
             status=200
@@ -467,7 +487,7 @@ class SubscriptionView(PGChildNodeView, SchemaDiffObjectCompare):
 
             sql = render_template(
                 "/".join([self.template_path, 'get_position.sql']),
-                conn=self.conn, subname=data['name']
+                conn=self.conn, subname=data['name'], did=did
             )
 
             status, r_set = self.conn.execute_dict(sql)
@@ -565,7 +585,7 @@ class SubscriptionView(PGChildNodeView, SchemaDiffObjectCompare):
             except ValueError:
                 data[k] = v
         try:
-            sql, name = self.get_sql(data, subid, 'msql')
+            sql, _ = self.get_sql(data, subid, 'msql')
             # Most probably this is due to error
             if not isinstance(sql, str):
                 return sql
@@ -633,6 +653,7 @@ class SubscriptionView(PGChildNodeView, SchemaDiffObjectCompare):
                 return gone(self._NOT_FOUND_PUB_INFORMATION)
 
             old_data = res['rows'][0]
+
             data, old_data = self.get_required_details(data, old_data)
 
             if 'slot_name' in data and data['slot_name'] == '':
@@ -775,6 +796,14 @@ class SubscriptionView(PGChildNodeView, SchemaDiffObjectCompare):
         else:
             old_data['connect'] = False
 
+        if self.manager.version >= 150000:
+            old_data['two_phase'] = \
+                self.two_phase_mapping[old_data['two_phase']]
+
+        if self.manager.version >= 160000:
+            old_data['streaming'] = \
+                self.streaming_mapping[old_data['streaming']]
+
         sql = render_template("/".join([self.template_path,
                                         self._CREATE_SQL]),
                               data=old_data, conn=self.conn, dummy=True)
@@ -914,10 +943,10 @@ class SubscriptionView(PGChildNodeView, SchemaDiffObjectCompare):
         drop_sql = kwargs.get('drop_sql', False)
 
         if data:
-            if 'pub' in data and type(data['pub']) == str:
+            if 'pub' in data and isinstance(data['pub'], str):
                 # Convert publication details to list
                 data['pub'] = data['pub'].split(',,')
-            sql, name = self.get_sql(data=data, subid=oid)
+            sql, _ = self.get_sql(data=data, subid=oid)
         else:
             if drop_sql:
                 sql = self.delete(gid=gid, sid=sid, did=did,

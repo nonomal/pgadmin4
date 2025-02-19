@@ -2,7 +2,7 @@
 #
 # pgAdmin 4 - PostgreSQL Tools
 #
-# Copyright (C) 2013 - 2023, The pgAdmin Development Team
+# Copyright (C) 2013 - 2025, The pgAdmin Development Team
 # This software is released under the PostgreSQL Licence
 #
 ##########################################################################
@@ -132,9 +132,10 @@ CREATE TABLE public.nonintpkey
             self._perform_test_for_table('nonintpkey', data_local)
         except Exception:
             traceback.print_exc()
-            self.assertTrue(False, 'Exception occurred in run test '
-                                   'Validate Insert, Update operations in '
-                                   'View/Edit data with given test data')
+            self.assertEqual(0, 1,
+                             'Exception occurred in run test Validate '
+                             'Insert, Update operations in View/Edit data with'
+                             ' given test data')
 
     def after(self):
         self.page.remove_server(self.server)
@@ -171,9 +172,7 @@ CREATE TABLE public.nonintpkey
         self._copy_paste_row(config_data_local)
 
         self._update_row(config_data_local)
-        self.page.click_tab("id-messages", rc_dock=True)
-        self._verify_messsages("")
-        self.page.click_tab("id-dataoutput", rc_dock=True)
+        self.page.click_tab("Data Output")
         updated_row_data = {
             i: config_data_local['update'][i] if i in config_data_local[
                 'update'] else val
@@ -182,7 +181,7 @@ CREATE TABLE public.nonintpkey
         self._verify_row_data(row=1,
                               config_check_data=updated_row_data)
 
-        self.page.close_data_grid()
+        self.page.close_query_tool(prompt=False)
 
     def _compare_cell_value(self, xpath, value):
         # Initialize an instance of WebDriverWait with timeout of 5 seconds

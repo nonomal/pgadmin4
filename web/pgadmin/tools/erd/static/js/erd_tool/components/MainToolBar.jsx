@@ -2,32 +2,32 @@
 //
 // pgAdmin 4 - PostgreSQL Tools
 //
-// Copyright (C) 2013 - 2023, The pgAdmin Development Team
+// Copyright (C) 2013 - 2025, The pgAdmin Development Team
 // This software is released under the PostgreSQL Licence
 //
 //////////////////////////////////////////////////////////////
 import React, {useCallback, useEffect, useState} from 'react';
-import { makeStyles } from '@material-ui/styles';
-import { Box, useTheme } from '@material-ui/core';
+import { styled } from '@mui/material/styles';
+import { Box, useTheme } from '@mui/material';
 import { PgButtonGroup, PgIconButton } from '../../../../../../static/js/components/Buttons';
-import FolderRoundedIcon from '@material-ui/icons/FolderRounded';
-import KeyboardArrowDownIcon from '@material-ui/icons/KeyboardArrowDown';
-import SaveRoundedIcon from '@material-ui/icons/SaveRounded';
-import HelpIcon from '@material-ui/icons/HelpRounded';
-import ZoomInIcon from '@material-ui/icons/ZoomIn';
-import ZoomOutIcon from '@material-ui/icons/ZoomOut';
-import ZoomOutMapIcon from '@material-ui/icons/ZoomOutMap';
-import AddBoxIcon from '@material-ui/icons/AddBox';
-import EditRoundedIcon from '@material-ui/icons/EditRounded';
-import FileCopyRoundedIcon from '@material-ui/icons/FileCopyRounded';
-import DeleteIcon from '@material-ui/icons/Delete';
-import NoteRoundedIcon from '@material-ui/icons/NoteRounded';
-import VisibilityRoundedIcon from '@material-ui/icons/VisibilityRounded';
-import VisibilityOffRoundedIcon from '@material-ui/icons/VisibilityOffRounded';
-import ImageRoundedIcon from '@material-ui/icons/ImageRounded';
-import FormatColorFillRoundedIcon from '@material-ui/icons/FormatColorFillRounded';
-import FormatColorTextRoundedIcon from '@material-ui/icons/FormatColorTextRounded';
-import AccountTreeOutlinedIcon from '@material-ui/icons/AccountTreeOutlined';
+import FolderRoundedIcon from '@mui/icons-material/FolderRounded';
+import KeyboardArrowDownIcon from '@mui/icons-material/KeyboardArrowDown';
+import SaveRoundedIcon from '@mui/icons-material/SaveRounded';
+import HelpIcon from '@mui/icons-material/HelpRounded';
+import ZoomInIcon from '@mui/icons-material/ZoomIn';
+import ZoomOutIcon from '@mui/icons-material/ZoomOut';
+import ZoomOutMapIcon from '@mui/icons-material/ZoomOutMap';
+import AddBoxIcon from '@mui/icons-material/AddBox';
+import EditRoundedIcon from '@mui/icons-material/EditRounded';
+import FileCopyRoundedIcon from '@mui/icons-material/FileCopyRounded';
+import DeleteIcon from '@mui/icons-material/Delete';
+import NoteRoundedIcon from '@mui/icons-material/NoteRounded';
+import VisibilityRoundedIcon from '@mui/icons-material/VisibilityRounded';
+import VisibilityOffRoundedIcon from '@mui/icons-material/VisibilityOffRounded';
+import ImageRoundedIcon from '@mui/icons-material/ImageRounded';
+import FormatColorFillRoundedIcon from '@mui/icons-material/FormatColorFillRounded';
+import FormatColorTextRoundedIcon from '@mui/icons-material/FormatColorTextRounded';
+import AccountTreeOutlinedIcon from '@mui/icons-material/AccountTreeOutlined';
 
 import { PgMenu, PgMenuItem, usePgMenuGroup } from '../../../../../../static/js/components/Menu';
 import gettext from 'sources/gettext';
@@ -38,45 +38,23 @@ import { MagicIcon, SQLFileIcon } from '../../../../../../static/js/components/E
 import { useModal } from '../../../../../../static/js/helpers/ModalProvider';
 import { withColorPicker } from '../../../../../../static/js/helpers/withColorPicker';
 
-const useStyles = makeStyles((theme)=>({
-  root: {
-    padding: '2px 4px',
-    display: 'flex',
-    alignItems: 'center',
-    gap: '4px',
-    backgroundColor: theme.otherVars.editorToolbarBg,
-    flexWrap: 'wrap',
-    ...theme.mixins.panelBorder.bottom,
-  },
-  connectionButton: {
-    display: 'flex',
-    width: '450px',
-    backgroundColor: theme.palette.default.main,
-    color: theme.palette.default.contrastText,
-    border: '1px solid ' + theme.palette.default.borderColor,
-    justifyContent: 'flex-start',
-  },
-  fillColorIcon: (props)=>({
-    '& path[fill-opacity]': {
-      fillOpacity: 1,
-      color: props.fillColor ?? theme.palette.background.default,
-    }
-  }),
-  textColorIcon: (props)=>({
-    '& path[fill-opacity]': {
-      fillOpacity: 1,
-      color: props.textColor ?? theme.palette.text.primary,
-    }
-  }),
+const StyledBox = styled(Box)(({theme}) => ({
+  padding: '2px 4px',
+  display: 'flex',
+  alignItems: 'center',
+  gap: '4px',
+  backgroundColor: theme.otherVars.editorToolbarBg,
+  flexWrap: 'wrap',
+  ...theme.mixins.panelBorder.bottom,
 }));
 
 export function MainToolBar({preferences, eventBus, fillColor, textColor, notation, onNotationChange}) {
-  const classes = useStyles({fillColor,textColor});
   const theme = useTheme();
   const [buttonsDisabled, setButtonsDisabled] = useState({
     'save': true,
     'edit-table': true,
     'clone-table': true,
+    'one-to-one': true,
     'one-to-many': true,
     'many-to-many': true,
     'show-note': true,
@@ -144,6 +122,7 @@ export function MainToolBar({preferences, eventBus, fillColor, textColor, notati
       [ERD_EVENTS.SINGLE_NODE_SELECTED, (selected)=>{
         setDisableButton('edit-table', !selected);
         setDisableButton('clone-table', !selected);
+        setDisableButton('one-to-one', !selected);
         setDisableButton('one-to-many', !selected);
         setDisableButton('many-to-many', !selected);
         setDisableButton('show-note', !selected);
@@ -177,8 +156,8 @@ export function MainToolBar({preferences, eventBus, fillColor, textColor, notati
   }, [checkedMenuItems['sql_with_drop']]);
 
   return (
-    <>
-      <Box className={classes.root}>
+    (<>
+      <StyledBox>
         <PgButtonGroup size="small">
           <PgIconButton title={gettext('Load Project')} icon={<FolderRoundedIcon />}
             shortcut={preferences.open_project} onClick={()=>{
@@ -233,19 +212,24 @@ export function MainToolBar({preferences, eventBus, fillColor, textColor, notati
             }} />
         </PgButtonGroup>
         <PgButtonGroup size="small">
-          <PgIconButton title={gettext('One-to-Many Relation')} icon={<span style={{letterSpacing: '-1px'}}>1M</span>}
+          <PgIconButton title={gettext('One-to-One Relation')} icon={<span style={{letterSpacing: '-1px'}}>1 - 1</span>}
+            shortcut={preferences.one_to_one} disabled={buttonsDisabled['one-to-one']}
+            onClick={()=>{
+              eventBus.fireEvent(ERD_EVENTS.ONE_TO_ONE);
+            }} />
+          <PgIconButton title={gettext('One-to-Many Relation')} icon={<span style={{letterSpacing: '-1px'}}>1 - M</span>}
             shortcut={preferences.one_to_many} disabled={buttonsDisabled['one-to-many']}
             onClick={()=>{
               eventBus.fireEvent(ERD_EVENTS.ONE_TO_MANY);
             }} />
-          <PgIconButton title={gettext('Many-to-Many Relation')} icon={<span style={{letterSpacing: '-1px'}}>MM</span>}
+          <PgIconButton title={gettext('Many-to-Many Relation')} icon={<span style={{letterSpacing: '-1px'}}>M - M</span>}
             shortcut={preferences.many_to_many} disabled={buttonsDisabled['many-to-many']}
             onClick={()=>{
               eventBus.fireEvent(ERD_EVENTS.MANY_TO_MANY);
             }} />
         </PgButtonGroup>
         <PgButtonGroup size="small">
-          <ColorButton title={gettext('Fill Color')} icon={<FormatColorFillRoundedIcon className={classes.fillColorIcon} />}
+          <ColorButton title={gettext('Fill Color')} icon={<FormatColorFillRoundedIcon />}
             value={fillColor ?? theme.palette.background.default} options={{
               allowSave: true,
             }}
@@ -256,7 +240,7 @@ export function MainToolBar({preferences, eventBus, fillColor, textColor, notati
                 eventBus.fireEvent(ERD_EVENTS.CHANGE_COLORS, null, textColor);
               }
             }}/>
-          <ColorButton title={gettext('Text Color')} icon={<FormatColorTextRoundedIcon className={classes.textColorIcon} />}
+          <ColorButton title={gettext('Text Color')} icon={<FormatColorTextRoundedIcon />}
             value={textColor ?? theme.palette.text.primary} options={{
               allowSave: true,
             }}
@@ -309,7 +293,7 @@ export function MainToolBar({preferences, eventBus, fillColor, textColor, notati
         <PgButtonGroup size="small">
           <PgIconButton title={gettext('Help')} icon={<HelpIcon />} onClick={onHelpClick} />
         </PgButtonGroup>
-      </Box>
+      </StyledBox>
       <PgMenu
         anchorRef={saveAsMenuRef}
         open={openMenuName=='menu-saveas'}
@@ -338,7 +322,7 @@ export function MainToolBar({preferences, eventBus, fillColor, textColor, notati
         <PgMenuItem hasCheck closeOnCheck value="crows" checked={notation == 'crows'} onClick={onNotationChange}>{gettext('Crow\'s Foot Notation')}</PgMenuItem>
         <PgMenuItem hasCheck closeOnCheck value="chen" checked={notation == 'chen'} onClick={onNotationChange}>{gettext('Chen Notation')}</PgMenuItem>
       </PgMenu>
-    </>
+    </>)
   );
 }
 

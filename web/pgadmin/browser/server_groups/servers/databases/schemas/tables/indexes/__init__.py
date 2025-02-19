@@ -2,7 +2,7 @@
 #
 # pgAdmin 4 - PostgreSQL Tools
 #
-# Copyright (C) 2013 - 2023, The pgAdmin Development Team
+# Copyright (C) 2013 - 2025, The pgAdmin Development Team
 # This software is released under the PostgreSQL Licence
 #
 ##########################################################################
@@ -29,6 +29,8 @@ from pgadmin.tools.schema_diff.directory_compare import directory_diff
 from pgadmin.tools.schema_diff.compare import SchemaDiffObjectCompare
 from pgadmin.browser.server_groups.servers.databases.schemas. \
     tables.indexes import utils as index_utils
+from pgadmin.browser.server_groups.servers.databases.schemas.utils \
+    import check_pgstattuple
 
 
 class IndexesModule(CollectionNodeModule):
@@ -384,7 +386,8 @@ class IndexesView(PGChildNodeView, SchemaDiffObjectCompare):
         """
 
         SQL = render_template(
-            "/".join([self.template_path, self._NODES_SQL]), tid=tid
+            "/".join([self.template_path, self._NODES_SQL]), tid=tid,
+            show_sys_objects=self.blueprint.show_system_objects
         )
         status, res = self.conn.execute_dict(SQL)
 
@@ -414,7 +417,8 @@ class IndexesView(PGChildNodeView, SchemaDiffObjectCompare):
         """
         SQL = render_template(
             "/".join([self.template_path, self._NODES_SQL]),
-            tid=tid, idx=idx
+            tid=tid, idx=idx,
+            show_sys_objects=self.blueprint.show_system_objects
         )
         status, rset = self.conn.execute_2darray(SQL)
         if not status:
@@ -453,7 +457,8 @@ class IndexesView(PGChildNodeView, SchemaDiffObjectCompare):
         """
         res = []
         SQL = render_template(
-            "/".join([self.template_path, self._NODES_SQL]), tid=tid
+            "/".join([self.template_path, self._NODES_SQL]), tid=tid,
+            show_sys_objects=self.blueprint.show_system_objects
         )
         status, rset = self.conn.execute_2darray(SQL)
         if not status:
@@ -511,7 +516,8 @@ class IndexesView(PGChildNodeView, SchemaDiffObjectCompare):
         SQL = render_template(
             "/".join([self.template_path, self._PROPERTIES_SQL]),
             did=did, tid=tid, idx=idx,
-            datlastsysoid=self._DATABASE_LAST_SYSTEM_OID
+            datlastsysoid=self._DATABASE_LAST_SYSTEM_OID,
+            show_sys_objects=self.blueprint.show_system_objects
         )
 
         status, res = self.conn.execute_dict(SQL)
@@ -717,7 +723,8 @@ class IndexesView(PGChildNodeView, SchemaDiffObjectCompare):
                 SQL = render_template(
                     "/".join([self.template_path, self._PROPERTIES_SQL]),
                     did=did, tid=tid, idx=idx,
-                    datlastsysoid=self._DATABASE_LAST_SYSTEM_OID
+                    datlastsysoid=self._DATABASE_LAST_SYSTEM_OID,
+                    show_sys_objects=self.blueprint.show_system_objects
                 )
 
                 status, res = self.conn.execute_dict(SQL)
@@ -774,7 +781,8 @@ class IndexesView(PGChildNodeView, SchemaDiffObjectCompare):
         try:
             SQL, name = index_utils.get_sql(
                 self.conn, data=data, did=did, tid=tid, idx=idx,
-                datlastsysoid=self._DATABASE_LAST_SYSTEM_OID)
+                datlastsysoid=self._DATABASE_LAST_SYSTEM_OID,
+                show_sys_objects=self.blueprint.show_system_objects)
             if not isinstance(SQL, str):
                 return SQL
             SQL = SQL.strip('\n').strip(' ')
@@ -837,9 +845,10 @@ class IndexesView(PGChildNodeView, SchemaDiffObjectCompare):
                     data["storage_parameters"].update({param: data[param]})
 
         try:
-            sql, name = index_utils.get_sql(
+            sql, _ = index_utils.get_sql(
                 self.conn, data=data, did=did, tid=tid, idx=idx,
-                datlastsysoid=self._DATABASE_LAST_SYSTEM_OID, mode='create')
+                datlastsysoid=self._DATABASE_LAST_SYSTEM_OID, mode='create',
+                show_sys_objects=self.blueprint.show_system_objects)
             if not isinstance(sql, str):
                 return sql
             sql = sql.strip('\n').strip(' ')
@@ -869,7 +878,8 @@ class IndexesView(PGChildNodeView, SchemaDiffObjectCompare):
         SQL = index_utils.get_reverse_engineered_sql(
             self.conn, schema=self.schema, table=self.table, did=did,
             tid=tid, idx=idx, datlastsysoid=self._DATABASE_LAST_SYSTEM_OID,
-            add_not_exists_clause=True
+            add_not_exists_clause=True,
+            show_sys_objects=self.blueprint.show_system_objects
         )
 
         return ajax_response(response=SQL)
@@ -897,9 +907,10 @@ class IndexesView(PGChildNodeView, SchemaDiffObjectCompare):
             data['nspname'] = self.schema
             data['table'] = self.table
 
-            sql, name = index_utils.get_sql(
+            sql, _ = index_utils.get_sql(
                 self.conn, data=data, did=did, tid=tid, idx=idx,
-                datlastsysoid=self._DATABASE_LAST_SYSTEM_OID, mode='create')
+                datlastsysoid=self._DATABASE_LAST_SYSTEM_OID, mode='create',
+                show_sys_objects=self.blueprint.show_system_objects)
 
             sql = sql.strip('\n').strip(' ')
 
@@ -909,7 +920,8 @@ class IndexesView(PGChildNodeView, SchemaDiffObjectCompare):
                 table=self.table, did=did, tid=tid, idx=idx,
                 datlastsysoid=self._DATABASE_LAST_SYSTEM_OID,
                 template_path=None, with_header=False,
-                add_not_exists_clause=True
+                add_not_exists_clause=True,
+                show_sys_objects=self.blueprint.show_system_objects
             )
 
         drop_sql = ''
@@ -988,14 +1000,7 @@ class IndexesView(PGChildNodeView, SchemaDiffObjectCompare):
 
         if idx is not None:
             # Individual index
-
-            # Check if pgstattuple extension is already created?
-            # if created then only add extended stats
-            status, is_pgstattuple = self.conn.execute_scalar("""
-            SELECT (pg_catalog.count(extname) > 0) AS is_pgstattuple
-            FROM pg_catalog.pg_extension
-            WHERE extname='pgstattuple'
-            """)
+            status, is_pgstattuple = check_pgstattuple(self.conn, tid)
             if not status:
                 return internal_server_error(errormsg=is_pgstattuple)
 
@@ -1004,7 +1009,8 @@ class IndexesView(PGChildNodeView, SchemaDiffObjectCompare):
                 SQL = render_template(
                     "/".join([self.template_path, self._PROPERTIES_SQL]),
                     did=did, tid=tid, idx=idx,
-                    datlastsysoid=self._DATABASE_LAST_SYSTEM_OID
+                    datlastsysoid=self._DATABASE_LAST_SYSTEM_OID,
+                    show_sys_objects=self.blueprint.show_system_objects
                 )
                 status, res = self.conn.execute_dict(SQL)
                 if not status:
@@ -1139,7 +1145,7 @@ class IndexesView(PGChildNodeView, SchemaDiffObjectCompare):
                 difference={}
             )
 
-            required_create_keys = ['columns']
+            required_create_keys = ['columns', 'indconstraint']
 
             create_req = IndexesView._check_for_create_req(
                 required_create_keys,

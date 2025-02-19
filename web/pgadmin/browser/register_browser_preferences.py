@@ -2,7 +2,7 @@
 #
 # pgAdmin 4 - PostgreSQL Tools
 #
-# Copyright (C) 2013 - 2023, The pgAdmin Development Team
+# Copyright (C) 2013 - 2025, The pgAdmin Development Team
 # This software is released under the PostgreSQL Licence
 #
 ##########################################################################
@@ -14,12 +14,6 @@ from pgadmin.utils.constants import PREF_LABEL_DISPLAY,\
     PREF_LABEL_BREADCRUMBS
 from flask import current_app
 import config
-
-LOCK_LAYOUT_LEVEL = {
-    'PREVENT_DOCKING': 'docking',
-    'FULL': 'full',
-    'NONE': 'none'
-}
 
 
 def register_browser_preferences(self):
@@ -97,21 +91,6 @@ def register_browser_preferences(self):
         )
     )
 
-    self.lock_layout = self.preference.register(
-        'display', 'lock_layout',
-        gettext('Lock Layout'), 'radioModern', LOCK_LAYOUT_LEVEL['NONE'],
-        category_label=PREF_LABEL_DISPLAY, options=[
-            {'label': gettext('None'), 'value': LOCK_LAYOUT_LEVEL['NONE']},
-            {'label': gettext('Prevent Docking'),
-             'value': LOCK_LAYOUT_LEVEL['PREVENT_DOCKING']},
-            {'label': gettext('Full Lock'),
-             'value': LOCK_LAYOUT_LEVEL['FULL']},
-        ],
-        help_str=gettext(
-            'Lock the UI layout at different levels'
-        )
-    )
-
     self.table_row_count_threshold = self.preference.register(
         'properties', 'table_row_count_threshold',
         gettext("Count rows if estimated less than"), 'integer', 2000,
@@ -172,6 +151,21 @@ def register_browser_preferences(self):
             'shift': True,
             'control': False,
             'key': {'key_code': 91, 'char': '['}
+        },
+        category_label=PREF_LABEL_KEYBOARD_SHORTCUTS,
+        fields=fields
+    )
+
+    self.preference.register(
+        'keyboard_shortcuts',
+        'close_tab_panel',
+        gettext('Close tab panel'),
+        'keyboardshortcut',
+        {
+            'alt': False,
+            'shift': True,
+            'control': True,
+            'key': {'key_code': 87, 'char': 'w'}
         },
         category_label=PREF_LABEL_KEYBOARD_SHORTCUTS,
         fields=fields
@@ -345,21 +339,6 @@ def register_browser_preferences(self):
 
     self.preference.register(
         'keyboard_shortcuts',
-        'context_menu',
-        gettext('Open context menu'),
-        'keyboardshortcut',
-        {
-            'alt': True,
-            'shift': True,
-            'control': False,
-            'key': {'key_code': 67, 'char': 'c'}
-        },
-        category_label=PREF_LABEL_KEYBOARD_SHORTCUTS,
-        fields=fields
-    )
-
-    self.preference.register(
-        'keyboard_shortcuts',
         'direct_debugging',
         gettext('Direct debugging'),
         'keyboardshortcut',
@@ -368,36 +347,6 @@ def register_browser_preferences(self):
             'shift': True,
             'control': False,
             'key': {'key_code': 71, 'char': 'g'}
-        },
-        category_label=PREF_LABEL_KEYBOARD_SHORTCUTS,
-        fields=fields
-    )
-
-    self.preference.register(
-        'keyboard_shortcuts',
-        'dialog_tab_forward',
-        gettext('Dialog tab forward'),
-        'keyboardshortcut',
-        {
-            'alt': False,
-            'shift': True,
-            'control': True,
-            'key': {'key_code': 93, 'char': ']'}
-        },
-        category_label=PREF_LABEL_KEYBOARD_SHORTCUTS,
-        fields=fields
-    )
-
-    self.preference.register(
-        'keyboard_shortcuts',
-        'dialog_tab_backward',
-        gettext('Dialog tab backward'),
-        'keyboardshortcut',
-        {
-            'alt': False,
-            'shift': True,
-            'control': True,
-            'key': {'key_code': 91, 'char': '['}
         },
         category_label=PREF_LABEL_KEYBOARD_SHORTCUTS,
         fields=fields
@@ -494,7 +443,7 @@ def register_browser_preferences(self):
         )
     )
 
-    ope_new_tab_options = [
+    open_new_tab_options = [
         {'label': gettext('Query Tool'), 'value': 'qt'},
         {'label': gettext('Debugger'), 'value': 'debugger'},
         {'label': gettext('Schema Diff'), 'value': 'schema_diff'},
@@ -502,14 +451,14 @@ def register_browser_preferences(self):
 
     # Allow psq tool to open in new browser tab if ENABLE_PSQL is set to True
     if config.ENABLE_PSQL:
-        ope_new_tab_options.append(
+        open_new_tab_options.append(
             {'label': gettext('PSQL Tool'), 'value': 'psql_tool'})
 
     self.open_in_new_tab = self.preference.register(
         'tab_settings', 'new_browser_tab_open',
         gettext("Open in new browser tab"), 'select', None,
         category_label=PREF_LABEL_OPTIONS,
-        options=ope_new_tab_options,
+        options=open_new_tab_options,
         help_str=gettext(
             'Select Query Tool, Debugger, Schema Diff, ERD Tool '
             'or PSQL Tool from the drop-down to set '

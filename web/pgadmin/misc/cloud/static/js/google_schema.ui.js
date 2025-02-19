@@ -2,7 +2,7 @@
 //
 // pgAdmin 4 - PostgreSQL Tools
 //
-// Copyright (C) 2013 - 2023, The pgAdmin Development Team
+// Copyright (C) 2013 - 2025, The pgAdmin Development Team
 // This software is released under the PostgreSQL Licence
 //
 //////////////////////////////////////////////////////////////
@@ -53,35 +53,31 @@ class GoogleCredSchema extends BaseUISchema{
         btnName: gettext('Click here to authenticate yourself to Google'),
         helpMessage: gettext('After clicking the button above you will be redirected to the Google authentication page in a new browser tab.'),
         disabled: (state)=>{
-          return state.client_secret_file ? false : true;
+          return !state.client_secret_file;
         },
-        deferredDepChange: (state, source)=>{
-          return new Promise((resolve, reject)=>{
-            /* button clicked */
-            if(source == 'auth_btn') {
-              obj.fieldOptions.authenticateGoogle(state.client_secret_file)
-                .then((apiRes)=>{
-                  resolve(()=>{
-                    if(apiRes){
-                      obj.fieldOptions.verification_ack()
-                        .then(()=>{
-                          resolve();
-                        })
-                        .catch((err)=>{
-                          reject(err);
-                        });
-                    }
-                  });
-                })
-                .catch((err)=>{
-                  reject(err);
-                });
-            }
-          });
-        }
-      }
-    ];}
+        onClick: () => {
+          const schemaState = obj.state;
+          if (!schemaState) return;
 
+          const state = schemaState.data;
+
+          setTimeout(() => {
+            obj.fieldOptions.authenticateGoogle(state.client_secret_file)
+              .then((apiRes) => {
+                if(apiRes) {
+                  obj.fieldOptions.verification_ack();
+                }
+              }).catch((err) => {
+                console.error(
+                  err instanceof Error ?
+                    err : Error(gettext('Something went wrong'))
+                );
+              });
+          }, 0);
+        },
+      },
+    ];
+  }
 }
 
 class GoogleProjectDetailsSchema extends BaseUISchema {
@@ -223,7 +219,7 @@ class GoogleInstanceSchema extends BaseUISchema {
       }
     ];
   }
-}  
+}
 
 class GoogleStorageSchema extends BaseUISchema {
   constructor() {
@@ -235,22 +231,22 @@ class GoogleStorageSchema extends BaseUISchema {
   get baseFields() {
     return [
       {
-        id: 'storage_type', 
-        label: gettext('Storage type'), 
+        id: 'storage_type',
+        label: gettext('Storage type'),
         type: 'select',
         mode: ['create'],
         noEmpty: true,
         options: [
           {'label': gettext('SSD'), 'value': 'PD_SSD'},
           {'label': gettext('HDD'), 'value': 'PD_HDD'},
-        ], 
+        ],
       },
       {
-        id: 'storage_size', 
-        label: gettext('Storage capacity'), 
+        id: 'storage_size',
+        label: gettext('Storage capacity'),
         type: 'int',
-        mode: ['create'], 
-        noEmpty: true, 
+        mode: ['create'],
+        noEmpty: true,
         deps: ['storage_type'],
         helpMessage: gettext('Size in GB.'),
       }
@@ -391,7 +387,7 @@ class GoogleDatabaseSchema extends BaseUISchema {
         noEmpty: true,
         helpMessage: gettext(
           'Set a password for the default admin user "postgres".'
-        ),
+        ), controlProps: { autoComplete: 'new-password' }
       },
       {
         id: 'db_confirm_password',
@@ -445,11 +441,11 @@ class GoogleClusterSchema extends BaseUISchema {
       },
       {}
     );
-    
+
     this.googleStorageDetails = new GoogleStorageSchema(
       {},
       {}
-    );  
+    );
 
     this.googleNetworkDetails = new GoogleNetworkSchema({}, {});
 
@@ -508,7 +504,7 @@ class GoogleClusterSchema extends BaseUISchema {
   }
 
   validate(data, setErr) {
-    if ( !isEmptyString(data.name) && (!/^(?=[a-z])[a-z0-9\-]*$/.test(data.name) || data.name.length > 97)) {
+    if ( !isEmptyString(data.name) && (!/^(?=[a-z])[a-z0-9-]*$/.test(data.name) || data.name.length > 97)) {
       setErr('name',gettext('Name must only contain lowercase letters, numbers, and hyphens.Should start with a letter and must be 97 characters or less'));
       return true;
     }

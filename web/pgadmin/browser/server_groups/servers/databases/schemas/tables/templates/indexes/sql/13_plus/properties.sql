@@ -4,7 +4,7 @@ SELECT DISTINCT ON(cls.relname) cls.oid, cls.relname as name, indrelid, indkey, 
         (SELECT sp.spcname FROM pg_catalog.pg_database dtb
         JOIN pg_catalog.pg_tablespace sp ON dtb.dattablespace=sp.oid
         WHERE dtb.oid = {{ did }}::oid)
-    END as spcname,
+    END as spcname, conname,
     tab.relname as tabname, indclass, con.oid AS conoid,
     CASE WHEN contype IN ('p', 'u', 'x') THEN desp.description
          ELSE des.description END AS description,
@@ -16,7 +16,8 @@ SELECT DISTINCT ON(cls.relname) cls.oid, cls.relname as name, indrelid, indkey, 
     substring(pg_catalog.array_to_string(cls.reloptions, ',') from 'pages_per_range=([0-9]*)') AS pages_per_range,
     substring(pg_catalog.array_to_string(cls.reloptions, ',') from 'buffering=([a-z]*)') AS buffering,
     substring(pg_catalog.array_to_string(cls.reloptions, ',') from 'fastupdate=([a-z]*)')::boolean AS fastupdate,
-    substring(pg_catalog.array_to_string(cls.reloptions, ',') from 'autosummarize=([a-z]*)')::boolean AS autosummarize
+    substring(pg_catalog.array_to_string(cls.reloptions, ',') from 'autosummarize=([a-z]*)')::boolean AS autosummarize,
+    substring(pg_catalog.array_to_string(cls.reloptions, ',') from 'lists=([0-9]*)') AS lists
     {% if datlastsysoid %}, (CASE WHEN cls.oid <= {{ datlastsysoid}}::oid THEN true ElSE false END) AS is_sys_idx {% endif %}
 FROM pg_catalog.pg_index idx
     JOIN pg_catalog.pg_class cls ON cls.oid=indexrelid
@@ -29,6 +30,8 @@ FROM pg_catalog.pg_index idx
     LEFT OUTER JOIN pg_catalog.pg_description des ON (des.objoid=cls.oid AND des.classoid='pg_class'::regclass)
     LEFT OUTER JOIN pg_catalog.pg_description desp ON (desp.objoid=con.oid AND desp.objsubid = 0 AND desp.classoid='pg_constraint'::regclass)
 WHERE indrelid = {{tid}}::OID
+{% if not show_sys_objects %}
     AND conname is NULL
+{% endif %}
     {% if idx %}AND cls.oid = {{idx}}::OID {% endif %}
     ORDER BY cls.relname

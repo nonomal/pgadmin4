@@ -2,7 +2,7 @@
 #
 # pgAdmin 4 - PostgreSQL Tools
 #
-# Copyright (C) 2013 - 2023, The pgAdmin Development Team
+# Copyright (C) 2013 - 2025, The pgAdmin Development Team
 # This software is released under the PostgreSQL Licence
 #
 ##########################################################################
@@ -22,7 +22,8 @@ from config import PG_DEFAULT_DRIVER
 from pgadmin.utils.constants import DATATYPE_TIME_WITH_TIMEZONE,\
     DATATYPE_TIME_WITHOUT_TIMEZONE,\
     DATATYPE_TIMESTAMP_WITH_TIMEZONE,\
-    DATATYPE_TIMESTAMP_WITHOUT_TIMEZONE
+    DATATYPE_TIMESTAMP_WITHOUT_TIMEZONE,\
+    DATA_TYPE_WITH_LENGTH
 
 
 class SchemaChildModule(CollectionNodeModule):
@@ -173,7 +174,7 @@ class DataTypeReader:
                 # Check if the type will have length and precision or not
                 if row['elemoid']:
                     length, precision, typeval = self.get_length_precision(
-                        row['elemoid'])
+                        row['elemoid'], row['typname'])
 
                 min_val, max_val = DataTypeReader._types_length_checks(
                     length, typeval, precision)
@@ -192,21 +193,16 @@ class DataTypeReader:
         return True, res
 
     @staticmethod
-    def get_length_precision(elemoid_or_name):
+    def get_length_precision(elemoid_or_name, typname=None):
         precision = False
         length = False
         typeval = ''
 
         # Check against PGOID/typename for specific type
         if elemoid_or_name:
-            if elemoid_or_name in (1560, 'bit',
-                                   1561, 'bit[]',
-                                   1562, 'varbit', 'bit varying',
-                                   1563, 'varbit[]', 'bit varying[]',
-                                   1042, 'bpchar', 'character',
-                                   1043, 'varchar', 'character varying',
-                                   1014, 'bpchar[]', 'character[]',
-                                   1015, 'varchar[]', 'character varying[]'):
+            if (elemoid_or_name in DATA_TYPE_WITH_LENGTH or
+                typname is not None and
+                    typname in DATA_TYPE_WITH_LENGTH):
                 typeval = 'L'
             elif elemoid_or_name in (1083, 'time',
                                      DATATYPE_TIME_WITHOUT_TIMEZONE,
@@ -267,7 +263,8 @@ class DataTypeReader:
             name == DATATYPE_TIMESTAMP_WITH_TIMEZONE or
             name == 'bit' or
             name == 'bit varying' or
-            name == 'varbit'
+            name == 'varbit' or name == 'vector' or name == 'halfvec' or
+            name == 'sparsevec'
         ):
             _prec = 0
             _len = typmod
@@ -521,13 +518,13 @@ def parse_rule_definition(res):
         # Parse data for condition
         condition = ''
         condition_part_match = re.search(
-            r"((?:ON)\s+(?:[\s\S]+?)"
-            r"(?:TO)\s+(?:[\s\S]+?)(?:DO))", data_def)
+            r"(ON\s+[\s\S]+?"
+            r"TO\s+[\s\S]+?DO)", data_def)
         if condition_part_match is not None:
             condition_part = condition_part_match.group(1)
 
             condition_match = re.search(
-                r"(?:WHERE)\s+(\([\s\S]*\))\s+(?:DO)", condition_part)
+                r"WHERE\s+(\([\s\S]*\))\s+DO", condition_part)
 
             if condition_match is not None:
                 condition = condition_match.group(1)
@@ -537,7 +534,7 @@ def parse_rule_definition(res):
 
             # Parse data for statements
         statement_match = re.search(
-            r"(?:DO\s+)(?:INSTEAD\s+)?([\s\S]*)(?:;)", data_def)
+            r"DO\s+(?:INSTEAD\s+)?([\s\S]*);", data_def)
 
         statement = ''
         if statement_match is not None:
@@ -720,3 +717,20 @@ def get_schemas(conn, show_system_objects=False):
 
     status, rset = conn.execute_2darray(SQL)
     return status, rset
+
+
+def check_pgstattuple(conn, oid):
+    """
+    This function is used to check pgstattuple extension is already created,
+    and current_user have permission to access that object.
+    """
+    status, is_pgstattuple = conn.execute_scalar("""
+        SELECT CASE WHEN (SELECT(count(extname) > 0) AS is_pgstattuple
+            FROM pg_catalog.pg_extension WHERE extname = 'pgstattuple')
+        THEN (SELECT pg_catalog.has_table_privilege(current_user, {0},
+            'SELECT')) ELSE FALSE END""".format(oid))
+
+    if not status:
+        return status, internal_server_error(errormsg=is_pgstattuple)
+
+    return status, is_pgstattuple

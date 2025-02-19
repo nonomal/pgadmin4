@@ -2,7 +2,7 @@
 #
 # pgAdmin 4 - PostgreSQL Tools
 #
-# Copyright (C) 2013 - 2023, The pgAdmin Development Team
+# Copyright (C) 2013 - 2025, The pgAdmin Development Team
 # This software is released under the PostgreSQL Licence
 #
 ##########################################################################
@@ -65,7 +65,7 @@ def get_version_mapping(template):
     template_path_parts = template.split("#", 3)
 
     if len(template_path_parts) == 4:
-        _, server_type, _, _ = template_path_parts
+        _, _, _, _ = template_path_parts
 
     return get_version_mapping_directories()
 
@@ -76,7 +76,9 @@ def get_version_mapping_directories():
     :param server_type:
     :return:
     """
-    return ({'name': "15_plus", 'number': 150000},
+    return ({'name': "17_plus", 'number': 170000},
+            {'name': "16_plus", 'number': 160000},
+            {'name': "15_plus", 'number': 150000},
             {'name': "14_plus", 'number': 140000},
             {'name': "13_plus", 'number': 130000},
             {'name': "12_plus", 'number': 120000},

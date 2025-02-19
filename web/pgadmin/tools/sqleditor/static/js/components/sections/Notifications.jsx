@@ -2,21 +2,20 @@
 //
 // pgAdmin 4 - PostgreSQL Tools
 //
-// Copyright (C) 2013 - 2023, The pgAdmin Development Team
+// Copyright (C) 2013 - 2025, The pgAdmin Development Team
 // This software is released under the PostgreSQL Licence
 //
 //////////////////////////////////////////////////////////////
 import React from 'react';
-import { commonTableStyles } from '../../../../../../static/js/Theme';
 import { QUERY_TOOL_EVENTS } from '../QueryToolConstants';
 import gettext from 'sources/gettext';
 import _ from 'lodash';
-import clsx from 'clsx';
 import { QueryToolEventsContext } from '../QueryToolComponent';
+import Table from '../../../../../../static/js/components/Table';
 
 export function Notifications() {
   const [notices, setNotices] = React.useState([]);
-  const tableClasses = commonTableStyles();
+
   const eventBus = React.useContext(QueryToolEventsContext);
   React.useEffect(()=>{
     eventBus.registerListener(QUERY_TOOL_EVENTS.PUSH_NOTICE, (notice)=>{
@@ -35,7 +34,7 @@ export function Notifications() {
   }, []);
 
 
-  return <table className={clsx(tableClasses.table, tableClasses.borderBottom)}>
+  return <Table>
     <thead>
       <tr>
         <th>{gettext('Recorded time')}</th>
@@ -54,5 +53,5 @@ export function Notifications() {
         </tr>;
       })}
     </tbody>
-  </table>;
+  </Table>;
 }

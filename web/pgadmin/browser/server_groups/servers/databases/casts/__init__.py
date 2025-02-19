@@ -2,7 +2,7 @@
 #
 # pgAdmin 4 - PostgreSQL Tools
 #
-# Copyright (C) 2013 - 2023, The pgAdmin Development Team
+# Copyright (C) 2013 - 2025, The pgAdmin Development Team
 # This software is released under the PostgreSQL Licence
 #
 ##########################################################################
@@ -566,7 +566,7 @@ class CastView(PGChildNodeView, SchemaDiffObjectCompare):
          :return:
         """
         data = request.args
-        sql, name = self.get_sql(gid, sid, did, data, cid)
+        sql, _ = self.get_sql(gid, sid, did, data, cid)
         # Most probably this is due to error
         if not isinstance(sql, str):
             return sql
@@ -809,8 +809,8 @@ class CastView(PGChildNodeView, SchemaDiffObjectCompare):
         drop_sql = kwargs.get('drop_sql', False)
 
         if data:
-            sql, name = self.get_sql(gid=gid, sid=sid, did=did, data=data,
-                                     cid=oid)
+            sql, _ = self.get_sql(gid=gid, sid=sid, did=did, data=data,
+                                  cid=oid)
         else:
             if drop_sql:
                 sql = self.delete(gid=gid, sid=sid, did=did,

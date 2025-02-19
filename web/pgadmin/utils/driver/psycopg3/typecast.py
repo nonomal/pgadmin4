@@ -2,7 +2,7 @@
 #
 # pgAdmin 4 - PostgreSQL Tools
 #
-# Copyright (C) 2013 - 2022, The pgAdmin Development Team
+# Copyright (C) 2013 - 2025, The pgAdmin Development Team
 # This software is released under the PostgreSQL Licence
 #
 ##########################################################################
@@ -20,6 +20,7 @@ from psycopg.types.net import InetLoader
 from psycopg.adapt import Loader
 from ipaddress import ip_address, ip_interface
 from psycopg._encodings import py_codecs as encodings
+from psycopg.pq import Format as _pq_Format
 
 configure_driver_encodings(encodings)
 
@@ -128,9 +129,6 @@ PSYCOPG_SUPPORTED_MULTIRANGE_ARRAY_TYPES = (6155, 6150, 6157, 6151, 6152, 6153)
 
 
 def register_global_typecasters():
-    # This registers a unicode type caster for datatype 'RECORD'.
-    psycopg.adapters.register_loader(
-        2249, TextLoaderpgAdmin)
     # This registers a unicode type caster for datatype 'RECORD_ARRAY'.
     psycopg.adapters.register_loader(
         2287, TextLoaderpgAdmin)
@@ -174,10 +172,16 @@ def register_binary_typecasters(connection):
     # The new classes can be registered globally, on a connection, on a cursor
 
     connection.adapters.register_loader(17,
-                                        pgAdminByteaLoader)
+                                        ByteaLoader)
 
     connection.adapters.register_loader(1001,
-                                        pgAdminByteaLoader)
+                                        ByteaLoader)
+
+    connection.adapters.register_loader(17,
+                                        ByteaBinaryLoader)
+
+    connection.adapters.register_loader(1001,
+                                        ByteaBinaryLoader)
 
 
 def register_array_to_string_typecasters(connection=None):
@@ -194,7 +198,7 @@ def register_array_to_string_typecasters(connection=None):
                                                 TextLoaderpgAdmin)
 
 
-class pgAdminInetLoader(InetLoader):
+class InetLoader(InetLoader):
     def load(self, data):
         if isinstance(data, memoryview):
             data = bytes(data)
@@ -206,11 +210,18 @@ class pgAdminInetLoader(InetLoader):
 
 
 # The new classes can be registered globally, on a connection, on a cursor
-psycopg.adapters.register_loader("inet", pgAdminInetLoader)
-psycopg.adapters.register_loader("cidr", pgAdminInetLoader)
+psycopg.adapters.register_loader("inet", InetLoader)
+psycopg.adapters.register_loader("cidr", InetLoader)
 
 
-class pgAdminByteaLoader(Loader):
+class ByteaLoader(Loader):
+    def load(self, data):
+        return 'binary data' if data is not None else None
+
+
+class ByteaBinaryLoader(Loader):
+    format = _pq_Format.BINARY
+
     def load(self, data):
         return 'binary data' if data is not None else None
 

@@ -1,19 +1,29 @@
-import jasmineEnzyme from 'jasmine-enzyme';
+/////////////////////////////////////////////////////////////
+//
+// pgAdmin 4 - PostgreSQL Tools
+//
+// Copyright (C) 2013 - 2025, The pgAdmin Development Team
+// This software is released under the PostgreSQL Licence
+//
+//////////////////////////////////////////////////////////////
 import React from 'react';
-import {mount} from 'enzyme';
-import '../helper/enzyme.helper';
+
+
 import {
   RightAngleLinkModel,
 } from '@projectstorm/react-diagrams';
 
 import OneToManyPortModel from 'pgadmin.tools.erd/erd_tool/ports/OneToManyPort';
 import {OneToManyLinkModel, OneToManyLinkWidget, OneToManyLinkFactory} from 'pgadmin.tools.erd/erd_tool/links/OneToManyLink';
+import ERDModel from 'pgadmin.tools.erd/erd_tool/ERDModel';
+import { render } from '@testing-library/react';
+import Theme from '../../../pgadmin/static/js/Theme';
 
 
 describe('ERD OneToManyLinkModel', ()=>{
   let modelObj = null;
   beforeAll(()=>{
-    spyOn(RightAngleLinkModel.prototype, 'serialize').and.returnValue({'key': 'value'});
+    jest.spyOn(RightAngleLinkModel.prototype, 'serialize').mockReturnValue({'key': 'value'});
   });
   beforeEach(()=>{
     modelObj = new OneToManyLinkModel({
@@ -99,14 +109,14 @@ describe('ERD OneToManyLinkModel', ()=>{
 
 describe('ERD OneToManyLinkWidget', ()=>{
   let linkFactory = new OneToManyLinkFactory();
+  let model = new ERDModel();
   let engine = {
     getFactoryForLink: ()=>linkFactory,
+    getModel: ()=>model
   };
   let link = null;
 
   beforeEach(()=>{
-    jasmineEnzyme();
-
     link = new OneToManyLinkModel({
       color: '#000',
       data: {
@@ -120,14 +130,55 @@ describe('ERD OneToManyLinkWidget', ()=>{
     link.setTargetPort(new OneToManyPortModel({options: {}}));
   });
 
+  jest.spyOn(model, 'getNodes').mockReturnValue([
+    {
+      name: 'test1',
+      getID: function() {
+        return 'id1';
+      },
+      getData: function(){ return {
+        'name': 'table1',
+        'schema': 'erd1',
+        'columns': [
+          {'name': 'col11', attnum: 0},
+          {'name': 'col12', attnum: 1},
+        ],
+      };},
+      getConstraintCols: function(){ return {
+        ukCols: [],
+        pkCols: []
+      };}
+    },
+    {
+      name: 'test2',
+      getID: function() {
+        return 'id2';
+      },
+      getData: function(){ return {
+        'name': 'table2',
+        'schema': 'erd2',
+        'columns': [
+          {'name': 'col21', attnum: 0},
+          {'name': 'col22', attnum: 1},
+        ],
+      };},
+      getConstraintCols: function(){ return {
+        ukCols: [],
+        pkCols: []
+      };}
+    },
+  ]);
+
   it('render', ()=>{
-    let linkWidget = mount(
-      <svg><OneToManyLinkWidget link={link} diagramEngine={engine} factory={linkFactory} /></svg>
+    let linkWidget = render(
+      <Theme>
+        <svg><OneToManyLinkWidget link={link} diagramEngine={engine} factory={linkFactory} /></svg>
+      </Theme>
     );
 
-    let paths = linkWidget.find('g g');
-    expect(paths.at(0).find('polyline').length).toBe(1);
-    expect(paths.at(paths.length-1).find('polyline').length).toBe(1);
-    expect(paths.at(paths.length-1).find('circle').length).toBe(1);
+    let paths = linkWidget.container.querySelectorAll('g g');
+    expect(paths[0].querySelectorAll('polyline').length).toBe(1);
+    expect(paths[paths.length-1].querySelectorAll('polyline').length).toBe(1);
+    expect(paths[paths.length-1].querySelectorAll('circle').length).toBe(1);
   });
 });

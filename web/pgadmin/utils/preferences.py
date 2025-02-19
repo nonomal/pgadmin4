@@ -2,7 +2,7 @@
 #
 # pgAdmin 4 - PostgreSQL Tools
 #
-# Copyright (C) 2013 - 2023, The pgAdmin Development Team
+# Copyright (C) 2013 - 2025, The pgAdmin Development Team
 # This software is released under the PostgreSQL Licence
 #
 ##########################################################################
@@ -134,7 +134,6 @@ class _Preference():
         except Exception as e:
             current_app.logger.exception(e)
             return self.default
-        return res.value
 
     def _get_format_data(self, res):
         """
@@ -149,10 +148,11 @@ class _Preference():
                 if 'value' in opt and opt['value'] == res.value:
                     return True, res.value
 
-            if self.control_props and self.control_props['creatable']:
+            if self.control_props and 'creatable' in self.control_props and \
+                    self.control_props['creatable']:
                 return True, res.value
 
-            if self.select and self.select['tags']:
+            if self.select and 'tags' in self.select and self.select['tags']:
                 return True, res.value
             return True, self.default
         if self._type == 'select':
@@ -595,6 +595,34 @@ class Preferences():
         return None
 
     @classmethod
+    def save_cli(cls, mid, cid, pid, user_id, value):
+        """
+        save
+        Update the value for the preference in the configuration database.
+
+        :param mid: Module ID
+        :param cid: Category ID
+        :param pid: Preference ID
+        :param value: Value for the options
+        """
+
+        pref = UserPrefTable.query.filter_by(
+            pid=pid
+        ).filter_by(uid=user_id).first()
+
+        value = "{}".format(value)
+        if pref is None:
+            pref = UserPrefTable(
+                uid=user_id, pid=pid, value=value
+            )
+            db.session.add(pref)
+        else:
+            pref.value = value
+        db.session.commit()
+
+        return True, None
+
+    @classmethod
     def save(cls, mid, cid, pid, value):
         """
         save
@@ -666,3 +694,20 @@ class Preferences():
             pref.value = converter_func(pref.value)
 
         db.session.commit()
+
+    @classmethod
+    def reset(cls):
+        """
+        reset
+        Reset the preferences for the current user in the configuration table.
+        """
+        try:
+            db.session.query(UserPrefTable).filter(
+                UserPrefTable.uid == current_user.id).delete()
+            db.session.commit()
+        except Exception as e:
+            db.session.rollback()
+            current_app.logger.exception(e)
+            return False, str(e)
+
+        return True, None

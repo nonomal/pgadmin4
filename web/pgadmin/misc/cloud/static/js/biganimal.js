@@ -2,7 +2,7 @@
 //
 // pgAdmin 4 - PostgreSQL Tools
 //
-// Copyright (C) 2013 - 2023, The pgAdmin Development Team
+// Copyright (C) 2013 - 2025, The pgAdmin Development Team
 // This software is released under the PostgreSQL Licence
 //
 //////////////////////////////////////////////////////////////
@@ -205,7 +205,7 @@ export function validateBigAnimal() {
         }
       })
       .catch((error) => {
-        reject(`Error while fetching EDB BigAnimal verification URI: ${error.response.data.errormsg}`);
+        reject(new Error(`Error while fetching EDB BigAnimal verification URI: ${error.response.data.errormsg}`));
       });
   });
 }
@@ -246,7 +246,7 @@ export function getBigAnimalSummary(cloud, bigAnimalClusterTypeData, bigAnimalIn
   ];
   if(bigAnimalClusterTypeData.provider.includes('aws')){
     rows4.push(createData(gettext('Volume IOPS'), bigAnimalInstanceData.volume_IOPS));
-    rows4.push(createData(gettext('Disk Throuhgput'), bigAnimalInstanceData.disk_throughput));
+    rows4.push(createData(gettext('Disk Throughput'), bigAnimalInstanceData.disk_throughput));
   }
 
   const rows5 = [

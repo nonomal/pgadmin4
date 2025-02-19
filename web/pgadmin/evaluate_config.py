@@ -2,7 +2,7 @@
 #
 # pgAdmin 4 - PostgreSQL Tools
 #
-# Copyright (C) 2013 - 2023, The pgAdmin Development Team
+# Copyright (C) 2013 - 2025, The pgAdmin Development Team
 # This software is released under the PostgreSQL Licence
 #
 ##########################################################################
@@ -10,6 +10,7 @@
 import os
 import sys
 import keyring
+import importlib.util
 
 # User configs loaded from config_local, config_distro etc.
 custom_config_settings = {}
@@ -24,6 +25,17 @@ def get_variables_from_module(module_name):
                      if not (key.startswith('__') or key.startswith('_')) and
                      validate_config_variable(key, value)}
     return variables
+
+
+# Function to load config_distro at custom path
+def import_module_from_path(module_name, file_path):
+    # Create a module spec
+    spec = importlib.util.spec_from_file_location(module_name, file_path)
+    # Create the module based on the spec
+    module = importlib.util.module_from_spec(spec)
+    # Execute the module (this loads it)
+    spec.loader.exec_module(module)
+    return module
 
 
 def validate_config_variable(key, value):
@@ -46,7 +58,12 @@ def validate_config_variable(key, value):
 
 # Load distribution-specific config overrides
 try:
-    import config_distro
+    if 'CONFIG_DISTRO_FILE_PATH' in os.environ:
+        config_distro_path = os.environ['CONFIG_DISTRO_FILE_PATH']
+        config_distro = import_module_from_path('config_distro',
+                                                config_distro_path)
+    else:
+        import config_distro
     config_distro_settings = get_variables_from_module('config_distro')
     custom_config_settings.update(config_distro_settings)
 except ImportError:
@@ -116,15 +133,24 @@ def evaluate_and_patch_config(config: dict) -> dict:
         config['ENABLE_PSQL'] = True
 
     if config.get('SERVER_MODE'):
-        config.setdefault('DISABLED_LOCAL_PASSWORD_STORAGE', True)
+        config.setdefault('USE_OS_SECRET_STORAGE', False)
         config.setdefault('KEYRING_NAME', '')
     else:
         k_name = keyring.get_keyring().name
+        # Setup USE_OS_SECRET_STORAGE false as no keyring backend available
         if k_name == 'fail Keyring':
-            config.setdefault('DISABLED_LOCAL_PASSWORD_STORAGE', True)
-            config.setdefault('KEYRING_NAME', '')
+            config['USE_OS_SECRET_STORAGE'] = False
+            config['KEYRING_NAME'] = ''
         else:
-            config.setdefault('DISABLED_LOCAL_PASSWORD_STORAGE', False)
             config.setdefault('KEYRING_NAME', k_name)
+
+    config.setdefault('SESSION_COOKIE_PATH', config.get('COOKIE_DEFAULT_PATH'))
+
+    # if a script name is preset, session cookies should go to sub path
+    if 'SCRIPT_NAME' in os.environ and os.environ["SCRIPT_NAME"]:
+        config.update(dict({
+            'APPLICATION_ROOT': os.environ["SCRIPT_NAME"],
+            'SESSION_COOKIE_PATH': os.environ["SCRIPT_NAME"],
+        }))
 
     return config

@@ -2,7 +2,7 @@
 #
 # pgAdmin 4 - PostgreSQL Tools
 #
-# Copyright (C) 2013 - 2023, The pgAdmin Development Team
+# Copyright (C) 2013 - 2025, The pgAdmin Development Team
 # This software is released under the PostgreSQL Licence
 #
 ##########################################################################
@@ -37,14 +37,14 @@ def underscore_escape(text):
         '<': "&lt;",
         '>': "&gt;",
         '"': "&quot;",
-        '`': "&#96;",
         "'": "&#39;"
     }
 
     # always replace & first
-    for c, r in sorted(html_map.items(),
-                       key=lambda x: 0 if x[0] == '&' else 1):
-        text = text.replace(c, r)
+    if text:
+        for c, r in sorted(html_map.items(),
+                           key=lambda x: 0 if x[0] == '&' else 1):
+            text = text.replace(c, r)
 
     return text
 
@@ -62,13 +62,13 @@ def underscore_unescape(text):
         "&lt;": '<',
         "&gt;": '>',
         "&quot;": '"',
-        "&#96;": '`',
         "&#39;": "'"
     }
 
     # always replace & first
-    for c, r in html_map.items():
-        text = text.replace(c, r)
+    if text:
+        for c, r in html_map.items():
+            text = text.replace(c, r)
 
     return text
 
@@ -580,6 +580,7 @@ class PGChildNodeView(NodeView):
             'Pf': 'function', 'Pt': 'trigger_function', 'Pp': 'procedure',
             'Rl': 'rule', 'Rs': 'row_security_policy', 'Sy': 'synonym',
             'Ty': 'type', 'Tr': 'trigger', 'Tc': 'compound_trigger',
+            'c': 'type',
             # None specified special handling for this type
             'A': None
         }

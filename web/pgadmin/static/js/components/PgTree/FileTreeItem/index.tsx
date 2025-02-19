@@ -1,11 +1,20 @@
+/////////////////////////////////////////////////////////////
+//
+// pgAdmin 4 - PostgreSQL Tools
+//
+// Copyright (C) 2013 - 2025, The pgAdmin Development Team
+// This software is released under the PostgreSQL Licence
+//
+//////////////////////////////////////////////////////////////
+
 import cn from 'classnames';
 import * as React from 'react';
 import { ClasslistComposite } from 'aspen-decorations';
 import { Directory, FileEntry, IItemRendererProps, ItemType, RenamePromptHandle, FileType, FileOrDir} from 'react-aspen';
 import {IFileTreeXTriggerEvents, FileTreeXEvent } from '../types';
-import _ from 'lodash';
 import { Notificar } from 'notificar';
-
+import _ from 'lodash';
+import DoubleClickHandler from './DoubleClickHandler';
 interface IItemRendererXProps {
     /**
      * In this implementation, decoration are null when item is `PromptHandle`
@@ -27,7 +36,7 @@ interface IItemRendererXProps {
 // DO NOT EXTEND FROM PureComponent!!! You might miss critical changes made deep within `item` prop
 // as far as efficiency is concerned, `react-aspen` works hard to ensure unnecessary updates are ignored
 export class FileTreeItem extends React.Component<IItemRendererXProps & IItemRendererProps> {
-  public static getBoundingClientRectForItem(item: FileEntry | Directory): ClientRect {
+  public static getBoundingClientRectForItem(item: FileEntry | Directory): DOMRect {
     const divRef = FileTreeItem.itemIdToRefMap.get(item.id);
     if (divRef) {
       return divRef.getBoundingClientRect();
@@ -39,7 +48,7 @@ export class FileTreeItem extends React.Component<IItemRendererXProps & IItemRen
   public static readonly renderHeight: number = 24;
   private static readonly itemIdToRefMap: Map<number, HTMLDivElement> = new Map();
   private static readonly refToItemIdMap: Map<number, HTMLDivElement> = new Map();
-  private fileTreeEvent: IFileTreeXTriggerEvents;
+  private readonly fileTreeEvent: IFileTreeXTriggerEvents;
 
   constructor(props) {
     super(props);
@@ -49,7 +58,6 @@ export class FileTreeItem extends React.Component<IItemRendererXProps & IItemRen
 
   public render() {
     const { item, itemType, decorations } = this.props;
-
     const isRenamePrompt = itemType === ItemType.RenamePrompt;
     const isNewPrompt = itemType === ItemType.NewDirectoryPrompt || itemType === ItemType.NewFilePrompt;
     const isDirExpanded = itemType === ItemType.Directory
@@ -65,48 +73,55 @@ export class FileTreeItem extends React.Component<IItemRendererXProps & IItemRen
               ? 'file'
               : 'directory';
 
-    if (this.props.item.parent && this.props.item.parent.path) {
+    if (this.props.item.parent?.parent && this.props.item.parent?.path) {
       this.props.item.resolvedPathCache = this.props.item.parent.path + '/' + this.props.item._metadata.data.id;
     }
 
     const itemChildren = item.children && item.children.length > 0 && item._metadata.data._type.indexOf('coll-') !== -1 ? '(' + item.children.length + ')' : '';
     const extraClasses = item._metadata.data.extraClasses ? item._metadata.data.extraClasses.join(' ') : '';
 
+    const tags = item._metadata.data?.tags ?? [];
+
     return (
-      <div
-        className={cn('file-entry', {
-          renaming: isRenamePrompt,
-          prompt: isRenamePrompt || isNewPrompt,
-          new: isNewPrompt,
-        }, fileOrDir, decorations ? decorations.classlist : null, `depth-${item.depth}`, extraClasses)}
-        data-depth={item.depth}
-        onContextMenu={this.handleContextMenu}
-        onClick={this.handleClick}
-        onDoubleClick={this.handleDoubleClick}
-        onDragStart={this.handleDragStartItem}
-        onMouseEnter={this.handleMouseEnter}
-        onMouseLeave={this.handleMouseLeave}
-        // required for rendering context menus when opened through context menu button on keyboard
-        ref={this.handleDivRef}
-        draggable={true}>
+      <DoubleClickHandler onDoubleClick={this.handleDoubleClick} onSingleClick={this.handleClick}>
+        <div
+          className={cn('file-entry', {
+            renaming: isRenamePrompt,
+            prompt: isRenamePrompt || isNewPrompt,
+            new: isNewPrompt,
+          }, fileOrDir, decorations ? decorations.classlist : null, `depth-${item.depth}`, extraClasses)}
+          data-depth={item.depth}
+          onContextMenu={this.handleContextMenu}
+          onDragStart={this.handleDragStartItem}
+          onMouseEnter={this.handleMouseEnter}
+          onMouseLeave={this.handleMouseLeave}
+          onKeyDown={()=>{/* taken care by parent */}}
+          // required for rendering context menus when opened through context menu button on keyboard
+          ref={this.handleDivRef}
+          draggable={true}>
 
-        {!isNewPrompt && fileOrDir === 'directory' ?
-          <i className={cn('directory-toggle', isDirExpanded ? 'open' : '')} />
-          : null
-        }
+          {!isNewPrompt && fileOrDir === 'directory' ?
+            <i className={cn('directory-toggle', isDirExpanded ? 'open' : '')} />
+            : null
+          }
 
-        <span className='file-label'>
-          {
-            item._metadata && item._metadata.data.icon ?
-              <i className={cn('file-icon', item._metadata && item._metadata.data.icon ? item._metadata.data.icon : fileOrDir)} /> : null
+          <span className='file-label'>{
+            item._metadata?.data?.icon ?
+              <i className={cn('file-icon', item._metadata?.data?.icon ? item._metadata.data.icon : fileOrDir)} /> : null
           }
           <span className='file-name'>
             { _.unescape(this.props.item.getMetadata('data')._label)}
-            <span className='children-count'>{itemChildren}</span>
           </span>
-
-        </span>
-      </div>);
+          <span className='children-count'>{itemChildren}</span>
+          {tags.map((tag)=>(
+            <div key={tag.text} className='file-tag' style={{'--tag-color': tag.color} as React.CSSProperties}>
+              {tag.text}
+            </div>
+          ))}
+          </span>
+        </div>
+      </DoubleClickHandler>
+    );
   }
 
   public componentDidMount() {
@@ -118,7 +133,7 @@ export class FileTreeItem extends React.Component<IItemRendererXProps & IItemRen
     this.setActiveFile(this.props.item);
   }
 
-  private setActiveFile = async (FileOrDir): Promise<void> => {
+  private readonly setActiveFile = async (FileOrDir): Promise<void> => {
     this.props.changeDirectoryCount(FileOrDir.parent);
     if(FileOrDir._loaded !== true) {
       this.events.dispatch(FileTreeXEvent.onTreeEvents, window.event, 'added', FileOrDir);
@@ -141,7 +156,7 @@ export class FileTreeItem extends React.Component<IItemRendererXProps & IItemRen
     }
   }
 
-  private handleDivRef = (r: HTMLDivElement) => {
+  private readonly handleDivRef = (r: HTMLDivElement) => {
     if (r === null) {
       FileTreeItem.itemIdToRefMap.delete(this.props.item.id);
     } else {
@@ -150,42 +165,42 @@ export class FileTreeItem extends React.Component<IItemRendererXProps & IItemRen
     }
   };
 
-  private handleContextMenu = (ev: React.MouseEvent) => {
+  private readonly handleContextMenu = (ev: React.MouseEvent) => {
     const { item, itemType, onContextMenu } = this.props;
     if (itemType === ItemType.File || itemType === ItemType.Directory) {
       onContextMenu(ev, item as FileOrDir);
     }
   };
 
-  private handleClick = (ev: React.MouseEvent) => {
+  private readonly handleClick = (ev: React.MouseEvent) => {
     const { item, itemType, onClick } = this.props;
     if (itemType === ItemType.File || itemType === ItemType.Directory) {
       onClick(ev, item as FileEntry, itemType);
     }
   };
 
-  private handleDoubleClick = (ev: React.MouseEvent) => {
+  private readonly handleDoubleClick = (ev: React.MouseEvent) => {
     const { item, itemType, onDoubleClick } = this.props;
     if (itemType === ItemType.File || itemType === ItemType.Directory) {
       onDoubleClick(ev, item as FileEntry, itemType);
     }
   };
 
-  private handleMouseEnter = (ev: React.MouseEvent) => {
+  private readonly handleMouseEnter = (ev: React.MouseEvent) => {
     const { item, itemType, onMouseEnter } = this.props;
     if (itemType === ItemType.File || itemType === ItemType.Directory) {
       onMouseEnter?.(ev, item as FileEntry);
     }
   };
 
-  private handleMouseLeave = (ev: React.MouseEvent) => {
+  private readonly handleMouseLeave = (ev: React.MouseEvent) => {
     const { item, itemType, onMouseLeave } = this.props;
     if (itemType === ItemType.File || itemType === ItemType.Directory) {
       onMouseLeave?.(ev, item as FileEntry);
     }
   };
 
-  private handleDragStartItem = (e: React.DragEvent) => {
+  private readonly handleDragStartItem = (e: React.DragEvent) => {
     const { item, itemType, events } = this.props;
     if (itemType === ItemType.File || itemType === ItemType.Directory) {
       const ref = FileTreeItem.itemIdToRefMap.get(item.id);

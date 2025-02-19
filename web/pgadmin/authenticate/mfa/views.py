@@ -2,7 +2,7 @@
 #
 # pgAdmin 4 - PostgreSQL Tools
 #
-# Copyright (C) 2013 - 2023, The pgAdmin Development Team
+# Copyright (C) 2013 - 2025, The pgAdmin Development Team
 # This software is released under the PostgreSQL Licence
 #
 ##############################################################################
@@ -37,8 +37,8 @@ def __handle_mfa_validation_request(
     mfa_method: str, user_mfa_auths: dict, form_data: dict
 ) -> None:
     """
-    An internal utlity function to execute mfa.validate(...) method in case, it
-    matched the following conditions:
+    An internal utility function to execute mfa.validate(...) method in case,
+    it matched the following conditions:
     1. Method specified is a valid and in the supported methods list.
     2. User has registered for this auth method.
 
@@ -134,9 +134,14 @@ def validate_view() -> Response:
     if mfa_method is None and len(mfa_views) > 0:
         list(mfa_views.items())[0][1]['selected'] = True
 
+    send_email_url = None
+    if 'email' in mfa_views:
+        send_email_url = url_for("mfa.send_email_code")
+
     return Response(render_template(
         "mfa/validate.html", _=_, views=mfa_views, base64=base64,
-        logout_url=get_logout_url()
+        logout_url=get_logout_url(),
+        send_email_url=send_email_url
     ), return_code, headers=_NO_CACHE_HEADERS, mimetype="text/html")
 
 
@@ -167,7 +172,7 @@ def _mfa_registration_view(
 
     if form_data[mfa.name] == 'SETUP':
         if supported_mfa['registered'] is True:
-            flash(_("'{}' is already registerd'").format(mfa.label),
+            flash(_("'{}' is already registered'").format(mfa.label),
                   MessageType.SUCCESS)
             return None
 
@@ -233,7 +238,7 @@ def __handle_registration_view_for_post_method(
         _next_url (str)  : Redirect to which url, when clicked on the
                            'continue' button on the registration page.
         _mfa_auths (dict): A dict object returned by the method -
-                           'mfa_suppored_methods'.
+                           'mfa_supported_methods'.
 
     Returns:
         (Union[str, None], Union[Response, None], Union[dict, None]):
@@ -284,7 +289,7 @@ def registration_view() -> Response:
     A url end-point to register/deregister an authentication method.
 
     It supports two HTTP methods:
-    * GET : Generate a view listing all the suppoted list with 'Setup',
+    * GET : Generate a view listing all the supported list with 'Setup',
             or 'Delete' buttons. If user has registered for the auth method, it
             will render a 'Delete' button next to it, and 'Setup' button
             otherwise.

@@ -2,7 +2,7 @@
 #
 # pgAdmin 4 - PostgreSQL Tools
 #
-# Copyright (C) 2013 - 2022, The pgAdmin Development Team
+# Copyright (C) 2013 - 2025, The pgAdmin Development Team
 # This software is released under the PostgreSQL Licence
 #
 ##########################################################################
@@ -60,7 +60,7 @@ def configure_driver_encodings(encodings):
     # python encoding of pyscopg's internal encodings dict.
 
     for key, val in encode_dict.items():
-        postgres_encoding, python_encoding = val
+        _, python_encoding = val
         psycopg._encodings._py_codecs[key] = python_encoding
 
     encodings.update((k.encode(), v

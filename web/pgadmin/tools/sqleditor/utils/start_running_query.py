@@ -2,7 +2,7 @@
 #
 # pgAdmin 4 - PostgreSQL Tools
 #
-# Copyright (C) 2013 - 2023, The pgAdmin Development Team
+# Copyright (C) 2013 - 2025, The pgAdmin Development Team
 # This software is released under the PostgreSQL Licence
 #
 ##########################################################################
@@ -54,7 +54,6 @@ class StartRunningQuery:
         can_edit = False
         can_filter = False
         notifies = None
-        trans_status = None
         status = -1
         result = None
         if transaction_object is not None and session_obj is not None:
@@ -66,11 +65,14 @@ class StartRunningQuery:
                 manager = get_driver(
                     PG_DEFAULT_DRIVER).connection_manager(
                     transaction_object.sid)
-                conn = manager.connection(did=transaction_object.did,
-                                          conn_id=self.connection_id,
-                                          auto_reconnect=False,
-                                          use_binary_placeholder=True,
-                                          array_to_string=True)
+                conn = manager.connection(
+                    did=transaction_object.did,
+                    conn_id=self.connection_id,
+                    auto_reconnect=False,
+                    use_binary_placeholder=True,
+                    array_to_string=True,
+                    **({"database": transaction_object.dbname} if hasattr(
+                        transaction_object,'dbname') else {}))
             except (ConnectionLost, SSHTunnelConnectionLost, CryptKeyMissing):
                 raise
             except Exception as e:
@@ -79,11 +81,15 @@ class StartRunningQuery:
 
             # Connect to the Server if not connected.
             if connect and not conn.connected():
-                status, msg = conn.connect()
-                if not status:
-                    self.logger.error(msg)
-                    return internal_server_error(errormsg=str(msg))
+                from pgadmin.tools.sqleditor.utils import \
+                    query_tool_connection_check
 
+                _, _, _, _, _, response = \
+                    query_tool_connection_check(trans_id)
+                # This is required for asking user to enter password
+                # when password is not saved for the server
+                if response is not None:
+                    return response
             effective_sql_statement = apply_explain_plan_wrapper_if_needed(
                 manager, sql)
 
@@ -100,18 +106,16 @@ class StartRunningQuery:
 
             # Get the notifies
             notifies = conn.get_notifies()
-            trans_status = conn.transaction_status()
-
         else:
             status = False
             result = gettext(
                 'Either transaction object or session object not found.')
+
         return make_json_response(
             data={
                 'status': status, 'result': result,
                 'can_edit': can_edit, 'can_filter': can_filter,
                 'notifies': notifies,
-                'transaction_status': trans_status,
             }
         )
 
@@ -124,7 +128,8 @@ class StartRunningQuery:
     def __execute_query(self, conn, session_obj, sql, trans_id, trans_obj):
         # on successful connection set the connection id to the
         # transaction object
-        trans_obj.set_connection_id(self.connection_id)
+        if hasattr(trans_obj, 'set_connection_id'):
+            trans_obj.set_connection_id(self.connection_id)
 
         StartRunningQuery.save_transaction_in_session(session_obj,
                                                       trans_id, trans_obj)
@@ -148,7 +153,7 @@ class StartRunningQuery:
             # and formatted_error is True.
             with app.app_context():
                 try:
-                    status, result = conn.execute_async(sql)
+                    _, _ = conn.execute_async(sql)
                     # # If the transaction aborted for some reason and
                     # # Auto RollBack is True then issue a rollback to cleanup.
                     if is_rollback_req:
@@ -157,12 +162,14 @@ class StartRunningQuery:
                     self.logger.error(e)
                     return internal_server_error(errormsg=str(e))
 
-        _thread = pgAdminThread(target=asyn_exec_query,
-                                args=(conn, sql, trans_obj, is_rollback_req,
-                                      current_app._get_current_object())
-                                )
+        _thread = QueryThread(target=asyn_exec_query,
+                              args=(conn, sql, trans_obj, is_rollback_req,
+                                    current_app._get_current_object())
+                              )
         _thread.start()
-        trans_obj.set_thread_native_id(_thread.native_id)
+        _native_id = _thread.native_id if hasattr(_thread, 'native_id'
+                                                  ) else _thread.ident
+        trans_obj.set_thread_native_id(_native_id)
         StartRunningQuery.save_transaction_in_session(session_obj,
                                                       trans_id, trans_obj)
 
@@ -209,7 +216,7 @@ class StartRunningQuery:
         return grid_data[str(transaction_id)]
 
 
-class pgAdminThread(Thread):
+class QueryThread(Thread):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.app = current_app._get_current_object()
